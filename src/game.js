@@ -11,15 +11,30 @@ export class Game {
 
         this.lastTime = 0
         this.targets = []
-        this.laser = new Laser(this)
+        this.lasers = []
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
         window.addEventListener("click", () => {
 
-            this.laser.fire()
-        }
-    )
+            const phase = Math.random() * Math.PI * 2
+
+            const colors = [
+                "#3a5cff",
+                "#7b3aff",
+                "#00aaff",
+                "#6a00ff"
+            ]
+
+            const color = colors[Math.floor(Math.random() * colors.length)]
+
+            const laser = new Laser(this, phase, color)
+
+            laser.fire()
+
+            this.lasers.push(laser)
+
+        })
 
     }
 
@@ -44,7 +59,10 @@ export class Game {
     update(delta) {
 
         this.spawnSystem.update(delta)
-        this.laser.update(delta)
+        for (let laser of this.lasers) {
+            laser.update(delta)
+        }
+        this.lasers = this.lasers.filter(laser => laser.active)
 
         for (let target of this.targets) {
 
@@ -64,7 +82,9 @@ export class Game {
         target.draw(this.ctx)
     }
 
-    this.laser.draw(this.ctx)
+    for (let laser of this.lasers) {
+        laser.draw(this.ctx)
+    }   
 
     }
 

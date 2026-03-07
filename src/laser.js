@@ -1,16 +1,17 @@
 export class Laser {
 
-    constructor(game) {
+    constructor(game, phase, color) {
 
         this.game = game
 
         this.x = 0
-
         this.speed = 600
 
-        this.frequency = 0.02
+        this.frequency = 0.015
+        this.amplitude = 200
 
-        this.amplitude = 80
+        this.phase = phase
+        this.color = color
 
         this.active = false
 
@@ -46,15 +47,17 @@ export class Laser {
 
         const centerY = this.game.canvas.height / 2
 
+        ctx.moveTo(0, centerY)
+
         for (let i = 0; i < this.x; i += 5) {
 
-            const y = centerY + Math.sin(i * this.frequency) * this.amplitude
+            const y = centerY + Math.sin((i * this.frequency) + this.phase) * this.amplitude
 
             ctx.lineTo(i, y)
 
         }
 
-        ctx.strokeStyle = "#3a5cff"
+        ctx.strokeStyle = this.color
         ctx.lineWidth = 3
 
         ctx.stroke()

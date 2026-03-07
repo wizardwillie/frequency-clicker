@@ -3,35 +3,40 @@ export class CollisionSystem {
     constructor(game) {
 
         this.game = game
-
-        this.hitThreshold = 15
+        this.hitThreshold = 20
 
     }
 
     check() {
 
-        const laser = this.game.laser
+        const lasers = this.game.lasers
         const targets = this.game.targets
-
-        if (!laser.active) return
 
         const centerY = this.game.canvas.height / 2
 
-        for (let i = targets.length - 1; i >= 0; i--) {
+        for (let laser of lasers) {
 
-            const target = targets[i]
+            if (!laser.active) continue
 
-            if (target.x > laser.x) continue
+            for (let i = targets.length - 1; i >= 0; i--) {
 
-            const waveY =
+                const target = targets[i]
+
+                if (target.x > laser.x) continue
+
+                const waveX = Math.floor(target.x / 5) * 5
+
+                const waveY =
                 centerY +
-                Math.sin(target.x * laser.frequency) * laser.amplitude
+                Math.sin((waveX * laser.frequency) + laser.phase) * laser.amplitude
 
-            const distance = Math.abs(target.y - waveY)
+                const distance = Math.abs(target.y - waveY)
 
-            if (distance < this.hitThreshold) {
+                if (distance < this.hitThreshold) {
 
-                targets.splice(i, 1)
+                    targets.splice(i, 1)
+
+                }
 
             }
 
