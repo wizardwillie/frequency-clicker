@@ -6,6 +6,7 @@ import {
     FREQUENCY_UPGRADE_STEP,
     FREQUENCY_UPGRADE_AMPLITUDE_BONUS,
     FREQUENCY_UPGRADE_WIDTH_BONUS,
+    MAX_LASER_WIDTH,
     AMPLITUDE_UPGRADE_STEP,
     FIRERATE_UPGRADE_STEP
 } from "./constants.js"
@@ -75,6 +76,7 @@ export class UpgradeSystem {
         this.game.laserFrequency += FREQUENCY_UPGRADE_STEP
         this.game.laserAmplitude += FREQUENCY_UPGRADE_AMPLITUDE_BONUS
         this.game.laserWidth += FREQUENCY_UPGRADE_WIDTH_BONUS
+        this.game.laserWidth = Math.min(this.game.laserWidth, MAX_LASER_WIDTH)
 
         return true
 

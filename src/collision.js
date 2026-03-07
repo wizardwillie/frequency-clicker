@@ -37,6 +37,11 @@ export class CollisionSystem {
 
                 if (distance < this.hitThreshold) {
 
+                    if (target.health > 1) {
+                        target.health -= 1
+                        continue
+                    }
+
                     this.game.points += target.value
                     this.game.floatingTexts.push(
                         new FloatingText(

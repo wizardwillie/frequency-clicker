@@ -314,46 +314,56 @@ export class Game {
 
         }
 
+        const frequencyCost = this.upgradeSystem.getFrequencyCost()
+        const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
+        const fireRateCost = this.upgradeSystem.getFireRateCost()
+
         this.drawPanelButton(
             this.frequencyButton,
             "Increase Frequency",
-            this.upgradeSystem.getFrequencyCost(),
-            this.upgradeSystem.frequencyLevel
+            frequencyCost,
+            this.upgradeSystem.frequencyLevel,
+            this.points >= frequencyCost
         )
 
         this.drawPanelButton(
             this.amplitudeButton,
             "Increase Amplitude",
-            this.upgradeSystem.getAmplitudeCost(),
-            this.upgradeSystem.amplitudeLevel
+            amplitudeCost,
+            this.upgradeSystem.amplitudeLevel,
+            this.points >= amplitudeCost
         )
 
         this.drawPanelButton(
             this.fireRateButton,
             "Increase Fire Rate",
-            this.upgradeSystem.getFireRateCost(),
-            this.upgradeSystem.fireRateLevel
+            fireRateCost,
+            this.upgradeSystem.fireRateLevel,
+            this.points >= fireRateCost
         )
 
     }
 
-    drawPanelButton(button, label, cost, level) {
+    drawPanelButton(button, label, cost, level, affordable) {
 
         const ctx = this.ctx
 
-        ctx.fillStyle = "#d7d7cf"
+        ctx.fillStyle = affordable ? "#d7d7cf" : "#c2c2bc"
         ctx.fillRect(button.x, button.y, button.width, button.height)
 
-        ctx.strokeStyle = "#222"
+        ctx.strokeStyle = affordable ? "#222" : "#555"
         ctx.lineWidth = 2
         ctx.strokeRect(button.x, button.y, button.width, button.height)
 
-        ctx.fillStyle = "#111"
+        ctx.fillStyle = affordable ? "#111" : "#5a5a5a"
         ctx.font = "17px Arial"
         ctx.fillText(label, button.x + 12, button.y + 28)
         ctx.font = "15px Arial"
         ctx.fillText("Cost: " + cost, button.x + 12, button.y + 52)
-        ctx.fillText("Lv " + level, button.x + button.width - 48, button.y + 52)
+
+        ctx.textAlign = "right"
+        ctx.fillText("Lv " + level, button.x + button.width - 12, button.y + 52)
+        ctx.textAlign = "left"
 
     }
 

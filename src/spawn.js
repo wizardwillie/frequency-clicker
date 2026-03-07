@@ -32,9 +32,28 @@ export class SpawnSystem {
 
         const speed = 100 + Math.random() * 100
 
-        const value = 1
+        const roll = Math.random()
+        const baseValue = 1
+        let type = "basic"
+        let valueMultiplier = 1
+        let maxHealth = 1
 
-        const target = new Target(0, 0, direction, speed, value)
+        if (roll < 0.1) {
+            type = "armored"
+            valueMultiplier = 3
+            maxHealth = 3
+        } else if (roll < 0.2) {
+            type = "highValue"
+            valueMultiplier = 4
+        }
+
+        const value = baseValue * valueMultiplier
+
+        const target = new Target(0, 0, direction, speed, value, {
+            type,
+            maxHealth
+        })
+
         target.y = target.radius + Math.random() * (canvas.height - target.radius * 2)
         target.x = direction === 1
             ? this.game.gridX + target.radius

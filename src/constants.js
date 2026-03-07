@@ -3,7 +3,11 @@ export const SIMPLE_LASER_COST = 10
 export const LASER_BASE_FREQUENCY = 0.006
 export const LASER_BASE_AMPLITUDE = 50
 export const LASER_BASE_WIDTH = 3
+export const MAX_LASER_WIDTH = 12
 export const LASER_BASE_FIRE_RATE = 4
+
+export const TARGET_VALUE_BASE = 1
+export const TARGET_VALUE_GROWTH = 1.15
 
 export const UPGRADE_GROWTH = 1.35
 
