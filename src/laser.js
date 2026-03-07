@@ -7,8 +7,9 @@ export class Laser {
         this.x = 0
         this.speed = 600
 
-        this.frequency = 0.008
-        this.amplitude = 60
+        this.frequency = this.game.laserFrequency
+        this.amplitude = this.game.laserAmplitude
+        this.width = this.game.laserWidth
 
         this.phase = phase
         this.color = color
@@ -60,7 +61,7 @@ export class Laser {
         }
 
         ctx.strokeStyle = this.color
-        ctx.lineWidth = 4
+        ctx.lineWidth = this.width
 
         ctx.stroke()
 

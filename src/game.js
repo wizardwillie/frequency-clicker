@@ -2,6 +2,14 @@ import { SpawnSystem } from "./spawn.js"
 import { Laser } from "./laser.js"
 import { CollisionSystem } from "./collision.js"
 import { FloatingText } from "./floatingText.js"
+import { UpgradeSystem } from "./upgrades.js"
+import {
+    SIMPLE_LASER_COST,
+    LASER_BASE_FREQUENCY,
+    LASER_BASE_AMPLITUDE,
+    LASER_BASE_WIDTH,
+    LASER_BASE_FIRE_RATE
+} from "./constants.js"
 
 export class Game {
 
@@ -16,7 +24,13 @@ export class Game {
         this.targets = []
         this.lasers = []
         this.floatingTexts = []
-        this.simpleLaserCost = 10
+        this.simpleLaserCost = SIMPLE_LASER_COST
+        this.laserFrequency = LASER_BASE_FREQUENCY
+        this.laserAmplitude = LASER_BASE_AMPLITUDE
+        this.laserWidth = LASER_BASE_WIDTH
+        this.laserFireRate = LASER_BASE_FIRE_RATE
+        this.lastShotTime = -Infinity
+        this.fireInterval = 1 / this.laserFireRate
         this.panelWidth = 300
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
@@ -26,9 +40,28 @@ export class Game {
             width: this.panelWidth - 40,
             height: 80
         }
+        this.frequencyButton = {
+            x: 20,
+            y: 200,
+            width: this.panelWidth - 40,
+            height: 72
+        }
+        this.amplitudeButton = {
+            x: 20,
+            y: 286,
+            width: this.panelWidth - 40,
+            height: 72
+        }
+        this.fireRateButton = {
+            x: 20,
+            y: 372,
+            width: this.panelWidth - 40,
+            height: 72
+        }
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
+        this.upgradeSystem = new UpgradeSystem(this)
         this.canvas.addEventListener("click", (event) => {
             this.handleClick(event)
         })
@@ -55,27 +88,49 @@ export class Game {
 
     handlePanelClick(mouseX, mouseY) {
 
-        if (this.hasLaser) return
+        if (!this.hasLaser) {
 
-        const button = this.unlockButton
-        const insideButton =
+            if (!this.isInsideButton(mouseX, mouseY, this.unlockButton)) return
+            if (this.points < this.simpleLaserCost) return
+
+            this.points -= this.simpleLaserCost
+            this.hasLaser = true
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    this.gridX + this.gridWidth / 2,
+                    this.canvas.height / 2,
+                    "Laser Unlocked"
+                )
+            )
+
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, this.frequencyButton)) {
+            this.upgradeSystem.buy("frequency")
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, this.amplitudeButton)) {
+            this.upgradeSystem.buy("amplitude")
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, this.fireRateButton)) {
+            this.upgradeSystem.buy("fireRate")
+            return
+        }
+
+    }
+
+    isInsideButton(mouseX, mouseY, button) {
+
+        return (
             mouseX >= button.x &&
             mouseX <= button.x + button.width &&
             mouseY >= button.y &&
             mouseY <= button.y + button.height
-
-        if (!insideButton) return
-        if (this.points < this.simpleLaserCost) return
-
-        this.points -= this.simpleLaserCost
-        this.hasLaser = true
-
-        this.floatingTexts.push(
-            new FloatingText(
-                this.gridX + this.gridWidth / 2,
-                this.canvas.height / 2,
-                "Laser Unlocked"
-            )
         )
 
     }
@@ -107,6 +162,14 @@ export class Game {
 
         // 2. Fire laser if owned
         if (this.hasLaser) {
+
+            const now = performance.now() / 1000
+
+            if (now - this.lastShotTime < this.fireInterval) {
+                return
+            }
+
+            this.lastShotTime = now
 
             const phase = Math.random() * Math.PI * 2
 
@@ -247,7 +310,50 @@ export class Game {
             ctx.font = "16px Arial"
             ctx.fillText("Cost: " + this.simpleLaserCost, button.x + 12, button.y + 58)
 
+            return
+
         }
+
+        this.drawPanelButton(
+            this.frequencyButton,
+            "Increase Frequency",
+            this.upgradeSystem.getFrequencyCost(),
+            this.upgradeSystem.frequencyLevel
+        )
+
+        this.drawPanelButton(
+            this.amplitudeButton,
+            "Increase Amplitude",
+            this.upgradeSystem.getAmplitudeCost(),
+            this.upgradeSystem.amplitudeLevel
+        )
+
+        this.drawPanelButton(
+            this.fireRateButton,
+            "Increase Fire Rate",
+            this.upgradeSystem.getFireRateCost(),
+            this.upgradeSystem.fireRateLevel
+        )
+
+    }
+
+    drawPanelButton(button, label, cost, level) {
+
+        const ctx = this.ctx
+
+        ctx.fillStyle = "#d7d7cf"
+        ctx.fillRect(button.x, button.y, button.width, button.height)
+
+        ctx.strokeStyle = "#222"
+        ctx.lineWidth = 2
+        ctx.strokeRect(button.x, button.y, button.width, button.height)
+
+        ctx.fillStyle = "#111"
+        ctx.font = "17px Arial"
+        ctx.fillText(label, button.x + 12, button.y + 28)
+        ctx.font = "15px Arial"
+        ctx.fillText("Cost: " + cost, button.x + 12, button.y + 52)
+        ctx.fillText("Lv " + level, button.x + button.width - 48, button.y + 52)
 
     }
 

@@ -1,0 +1,18 @@
+export const SIMPLE_LASER_COST = 10
+
+export const LASER_BASE_FREQUENCY = 0.006
+export const LASER_BASE_AMPLITUDE = 50
+export const LASER_BASE_WIDTH = 3
+export const LASER_BASE_FIRE_RATE = 4
+
+export const UPGRADE_GROWTH = 1.35
+
+export const FREQUENCY_UPGRADE_BASE = 10
+export const AMPLITUDE_UPGRADE_BASE = 15
+export const FIRERATE_UPGRADE_BASE = 20
+
+export const FREQUENCY_UPGRADE_STEP = 0.0006
+export const FREQUENCY_UPGRADE_AMPLITUDE_BONUS = 2
+export const FREQUENCY_UPGRADE_WIDTH_BONUS = 0.15
+export const AMPLITUDE_UPGRADE_STEP = 8
+export const FIRERATE_UPGRADE_STEP = 0.5
