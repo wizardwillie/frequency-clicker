@@ -23,10 +23,11 @@ export class CollisionSystem {
             for (let i = targets.length - 1; i >= 0; i--) {
 
                 const target = targets[i]
+                const targetGridX = target.x - this.game.gridX
 
-                if (target.x > laser.x) continue
+                if (targetGridX < 0 || targetGridX > laser.x) continue
 
-                const waveX = Math.floor(target.x / 5) * 5
+                const waveX = Math.floor(targetGridX / 5) * 5
 
                 const waveY =
                 centerY +

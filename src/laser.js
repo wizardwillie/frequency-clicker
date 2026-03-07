@@ -31,7 +31,7 @@ export class Laser {
 
         this.x += this.speed * delta
 
-        if (this.x > this.game.canvas.width) {
+        if (this.x > this.game.gridWidth) {
 
             this.active = false
 
@@ -46,14 +46,16 @@ export class Laser {
         ctx.beginPath()
 
         const centerY = this.game.canvas.height / 2
+        const gridStartX = this.game.gridX
+        const maxX = Math.min(this.x, this.game.gridWidth)
 
-        ctx.moveTo(0, centerY)
+        ctx.moveTo(gridStartX, centerY)
 
-        for (let i = 0; i < this.x; i += 5) {
+        for (let i = 0; i < maxX; i += 5) {
 
             const y = centerY + Math.sin((i * this.frequency) + this.phase) * this.amplitude
 
-            ctx.lineTo(i, y)
+            ctx.lineTo(gridStartX + i, y)
 
         }
 

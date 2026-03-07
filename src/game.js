@@ -20,76 +20,110 @@ export class Game {
         this.panelWidth = 300
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
+        this.unlockButton = {
+            x: 20,
+            y: 90,
+            width: this.panelWidth - 40,
+            height: 80
+        }
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
-        window.addEventListener("click", (event) => {
+        this.canvas.addEventListener("click", (event) => {
+            this.handleClick(event)
+        })
+    }
 
-            const rect = this.canvas.getBoundingClientRect()
+    handleClick(event) {
 
-            const mouseX = event.clientX - rect.left
-            const mouseY = event.clientY - rect.top
-            if (mouseX < this.panelWidth) return
+        const rect = this.canvas.getBoundingClientRect()
+        const mouseX = event.clientX - rect.left
+        const mouseY = event.clientY - rect.top
 
-            // 1. Check if clicking a target
-            for (let i = this.targets.length - 1; i >= 0; i--) {
+        if (mouseX < 0 || mouseX > this.canvas.width || mouseY < 0 || mouseY > this.canvas.height) {
+            return
+        }
 
-                const target = this.targets[i]
+        if (mouseX < this.panelWidth) {
+            this.handlePanelClick(mouseX, mouseY)
+            return
+        }
 
-                const dx = mouseX - target.x
-                const dy = mouseY - target.y
+        this.handleGridClick(mouseX, mouseY)
 
-                const distance = Math.sqrt(dx * dx + dy * dy)
+    }
 
-                if (distance < target.radius) {
+    handlePanelClick(mouseX, mouseY) {
 
-                    this.points += target.value
+        if (this.hasLaser) return
 
-                    this.floatingTexts.push(
-                        new FloatingText(target.x, target.y, "+" + target.value)
-                    )
+        const button = this.unlockButton
+        const insideButton =
+            mouseX >= button.x &&
+            mouseX <= button.x + button.width &&
+            mouseY >= button.y &&
+            mouseY <= button.y + button.height
 
-                    this.targets.splice(i, 1)
+        if (!insideButton) return
+        if (this.points < this.simpleLaserCost) return
 
-                    return
-                }
-            }
+        this.points -= this.simpleLaserCost
+        this.hasLaser = true
 
-            // 2. Buy Simple Laser
-            if (!this.hasLaser && this.points >= this.simpleLaserCost) {
+        this.floatingTexts.push(
+            new FloatingText(
+                this.gridX + this.gridWidth / 2,
+                this.canvas.height / 2,
+                "Laser Unlocked"
+            )
+        )
 
-                this.points -= this.simpleLaserCost
-                this.hasLaser = true
+    }
+
+    handleGridClick(mouseX, mouseY) {
+
+        // 1. Check if clicking a target
+        for (let i = this.targets.length - 1; i >= 0; i--) {
+
+            const target = this.targets[i]
+
+            const dx = mouseX - target.x
+            const dy = mouseY - target.y
+
+            const distance = Math.sqrt(dx * dx + dy * dy)
+
+            if (distance < target.radius) {
 
                 this.floatingTexts.push(
-                    new FloatingText(this.canvas.width/2, 100, "Laser Unlocked")
+                    new FloatingText(target.x, target.y, "+" + target.value)
                 )
+
+                this.points += target.value
+                this.targets.splice(i, 1)
 
                 return
             }
+        }
 
-            // 3. Fire laser if owned
-            if (this.hasLaser) {
+        // 2. Fire laser if owned
+        if (this.hasLaser) {
 
-                const phase = Math.random() * Math.PI * 2
+            const phase = Math.random() * Math.PI * 2
 
-                const colors = [
-                    "#3a5cff",
-                    "#7b3aff",
-                    "#00aaff",
-                    "#6a00ff"
-                ]
+            const colors = [
+                "#3a5cff",
+                "#7b3aff",
+                "#00aaff",
+                "#6a00ff"
+            ]
 
-                const color = colors[Math.floor(Math.random() * colors.length)]
+            const color = colors[Math.floor(Math.random() * colors.length)]
 
-                const laser = new Laser(this, phase, color)
+            const laser = new Laser(this, phase, color)
 
-                laser.fire()
-
-                this.lasers.push(laser)
-
-            }
-        })
+            laser.fire()
+            this.lasers.push(laser)
+        }
     }
 
     start() {
@@ -148,23 +182,6 @@ export class Game {
         for (let text of this.floatingTexts) {
             text.draw(this.ctx)
         }
-        this.ctx.fillStyle = "#111"
-        this.ctx.font = "18px Arial"
-
-        
-        if (!this.hasLaser) {
-
-            this.ctx.fillStyle = "#111"
-            this.ctx.font = "20px Arial"
-
-            this.ctx.fillText(
-                "Unlock Device: Simple Laser (" + this.simpleLaserCost + ")",
-                20,
-                60
-            )
-
-        }
-
     }
 
     drawGrid(offsetY) {
@@ -215,8 +232,20 @@ export class Game {
 
         if (!this.hasLaser) {
 
-            ctx.fillText("Buy Simple Laser", 20, 100)
-            ctx.fillText("Cost: " + this.simpleLaserCost, 20, 130)
+            const button = this.unlockButton
+
+            ctx.fillStyle = "#d7d7cf"
+            ctx.fillRect(button.x, button.y, button.width, button.height)
+
+            ctx.strokeStyle = "#222"
+            ctx.lineWidth = 2
+            ctx.strokeRect(button.x, button.y, button.width, button.height)
+
+            ctx.fillStyle = "#111"
+            ctx.font = "18px Arial"
+            ctx.fillText("Unlock Simple Laser", button.x + 12, button.y + 32)
+            ctx.font = "16px Arial"
+            ctx.fillText("Cost: " + this.simpleLaserCost, button.x + 12, button.y + 58)
 
         }
 

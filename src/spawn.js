@@ -28,20 +28,17 @@ export class SpawnSystem {
 
         const canvas = this.game.canvas
 
-        const centerY = canvas.height / 2
-        const spread = 220
-
-        const y = Math.random() * canvas.height
-
         const direction = Math.random() < 0.5 ? 1 : -1
-
-        const x = direction === 1 ? this.game.gridX : canvas.width
 
         const speed = 100 + Math.random() * 100
 
         const value = 1
 
-        const target = new Target(x, y, direction, speed, value)
+        const target = new Target(0, 0, direction, speed, value)
+        target.y = target.radius + Math.random() * (canvas.height - target.radius * 2)
+        target.x = direction === 1
+            ? this.game.gridX + target.radius
+            : canvas.width - target.radius
 
         this.game.targets.push(target)
 
