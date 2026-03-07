@@ -35,7 +35,7 @@ export class SpawnSystem {
 
         const direction = Math.random() < 0.5 ? 1 : -1
 
-        const x = direction === 1 ? 0 : canvas.width
+        const x = direction === 1 ? this.game.gridX : canvas.width
 
         const speed = 100 + Math.random() * 100
 

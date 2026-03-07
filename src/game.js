@@ -12,9 +12,14 @@ export class Game {
 
         this.lastTime = 0
         this.points = 0
+        this.hasLaser = false
         this.targets = []
         this.lasers = []
         this.floatingTexts = []
+        this.simpleLaserCost = 10
+        this.panelWidth = 300
+        this.gridX = this.panelWidth
+        this.gridWidth = this.canvas.width - this.panelWidth
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
@@ -24,7 +29,9 @@ export class Game {
 
             const mouseX = event.clientX - rect.left
             const mouseY = event.clientY - rect.top
+            if (mouseX < this.panelWidth) return
 
+            // 1. Check if clicking a target
             for (let i = this.targets.length - 1; i >= 0; i--) {
 
                 const target = this.targets[i]
@@ -36,40 +43,53 @@ export class Game {
 
                 if (distance < target.radius) {
 
-                    this.targets.splice(i, 1)
-
                     this.points += target.value
+
                     this.floatingTexts.push(
-                    new FloatingText(target.x, target.y, "+" + target.value)
+                        new FloatingText(target.x, target.y, "+" + target.value)
                     )
 
+                    this.targets.splice(i, 1)
+
                     return
-
                 }
-
             }
 
-            // If no target clicked, fire laser
+            // 2. Buy Simple Laser
+            if (!this.hasLaser && this.points >= this.simpleLaserCost) {
 
-            const phase = Math.random() * Math.PI * 2
+                this.points -= this.simpleLaserCost
+                this.hasLaser = true
 
-            const colors = [
-            "#3a5cff",
-            "#7b3aff",
-            "#00aaff",
-            "#6a00ff"
-            ]
+                this.floatingTexts.push(
+                    new FloatingText(this.canvas.width/2, 100, "Laser Unlocked")
+                )
 
-        const color = colors[Math.floor(Math.random() * colors.length)]
+                return
+            }
 
-        const laser = new Laser(this, phase, color)
+            // 3. Fire laser if owned
+            if (this.hasLaser) {
 
-        laser.fire()
+                const phase = Math.random() * Math.PI * 2
 
-        this.lasers.push(laser)
+                const colors = [
+                    "#3a5cff",
+                    "#7b3aff",
+                    "#00aaff",
+                    "#6a00ff"
+                ]
 
+                const color = colors[Math.floor(Math.random() * colors.length)]
+
+                const laser = new Laser(this, phase, color)
+
+                laser.fire()
+
+                this.lasers.push(laser)
+
+            }
         })
-
     }
 
     start() {
@@ -113,25 +133,41 @@ export class Game {
 
     render() {
 
-    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height)
+        this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height)
+        this.drawPanel()
+        this.drawGrid(100)
 
-    this.drawGrid()
+        for (let target of this.targets) {
+            target.draw(this.ctx)
+        }
 
-    for (let target of this.targets) {
-        target.draw(this.ctx)
+        for (let laser of this.lasers) {
+            laser.draw(this.ctx)
+        }   
+
+        for (let text of this.floatingTexts) {
+            text.draw(this.ctx)
+        }
+        this.ctx.fillStyle = "#111"
+        this.ctx.font = "18px Arial"
+
+        
+        if (!this.hasLaser) {
+
+            this.ctx.fillStyle = "#111"
+            this.ctx.font = "20px Arial"
+
+            this.ctx.fillText(
+                "Unlock Device: Simple Laser (" + this.simpleLaserCost + ")",
+                20,
+                60
+            )
+
+        }
+
     }
 
-    for (let laser of this.lasers) {
-        laser.draw(this.ctx)
-    }   
-
-    for (let text of this.floatingTexts) {
-        text.draw(this.ctx)
-    }
-
-    }
-
-    drawGrid() {
+    drawGrid(offsetY) {
 
         const ctx = this.ctx
         const gridSize = 40
@@ -142,8 +178,8 @@ export class Game {
         for (let x = 0; x < this.canvas.width; x += gridSize) {
 
             ctx.beginPath()
-            ctx.moveTo(x, 0)
-            ctx.lineTo(x, this.canvas.height)
+            ctx.moveTo(x + this.gridX, 0)
+            ctx.lineTo(x + this.gridX, this.canvas.height)
             ctx.stroke()
 
         }
@@ -151,16 +187,40 @@ export class Game {
         for (let y = 0; y < this.canvas.height; y += gridSize) {
 
             ctx.beginPath()
-            ctx.moveTo(0, y)
+            ctx.moveTo(this.gridX, y)
             ctx.lineTo(this.canvas.width, y)
             ctx.stroke()
 
         }
 
     
-    this.ctx.fillStyle = "#111"
-    this.ctx.font = "20px Arial"
-
-    this.ctx.fillText("Points: " + this.points, 20, 30)
+    
     }
+
+    drawPanel() {
+
+        const ctx = this.ctx
+
+        ctx.fillStyle = "#e9e9e2"
+        ctx.fillRect(0, 0, this.panelWidth, this.canvas.height)
+
+        ctx.strokeStyle = "#222"
+        ctx.lineWidth = 2
+        ctx.strokeRect(0, 0, this.panelWidth, this.canvas.height)
+
+        ctx.fillStyle = "#111"
+        ctx.font = "20px Arial"
+
+        ctx.fillText("Points: " + this.points, 20, 40)
+
+        if (!this.hasLaser) {
+
+            ctx.fillText("Buy Simple Laser", 20, 100)
+            ctx.fillText("Cost: " + this.simpleLaserCost, 20, 130)
+
+        }
+
+    }
+
+
 }
