@@ -7,8 +7,8 @@ export class Laser {
         this.x = 0
         this.speed = 600
 
-        this.frequency = 0.015
-        this.amplitude = 200
+        this.frequency = 0.008
+        this.amplitude = 60
 
         this.phase = phase
         this.color = color
@@ -58,7 +58,7 @@ export class Laser {
         }
 
         ctx.strokeStyle = this.color
-        ctx.lineWidth = 3
+        ctx.lineWidth = 4
 
         ctx.stroke()
 

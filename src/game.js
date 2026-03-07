@@ -1,6 +1,7 @@
 import { SpawnSystem } from "./spawn.js"
 import { Laser } from "./laser.js"
 import { CollisionSystem } from "./collision.js"
+import { FloatingText } from "./floatingText.js"
 
 export class Game {
 
@@ -10,29 +11,62 @@ export class Game {
         this.ctx = canvas.getContext("2d")
 
         this.lastTime = 0
+        this.points = 0
         this.targets = []
         this.lasers = []
+        this.floatingTexts = []
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
-        window.addEventListener("click", () => {
+        window.addEventListener("click", (event) => {
+
+            const rect = this.canvas.getBoundingClientRect()
+
+            const mouseX = event.clientX - rect.left
+            const mouseY = event.clientY - rect.top
+
+            for (let i = this.targets.length - 1; i >= 0; i--) {
+
+                const target = this.targets[i]
+
+                const dx = mouseX - target.x
+                const dy = mouseY - target.y
+
+                const distance = Math.sqrt(dx * dx + dy * dy)
+
+                if (distance < target.radius) {
+
+                    this.targets.splice(i, 1)
+
+                    this.points += target.value
+                    this.floatingTexts.push(
+                    new FloatingText(target.x, target.y, "+" + target.value)
+                    )
+
+                    return
+
+                }
+
+            }
+
+            // If no target clicked, fire laser
 
             const phase = Math.random() * Math.PI * 2
 
             const colors = [
-                "#3a5cff",
-                "#7b3aff",
-                "#00aaff",
-                "#6a00ff"
+            "#3a5cff",
+            "#7b3aff",
+            "#00aaff",
+            "#6a00ff"
             ]
 
-            const color = colors[Math.floor(Math.random() * colors.length)]
+        const color = colors[Math.floor(Math.random() * colors.length)]
 
-            const laser = new Laser(this, phase, color)
+        const laser = new Laser(this, phase, color)
 
-            laser.fire()
+        laser.fire()
 
-            this.lasers.push(laser)
+        this.lasers.push(laser)
 
         })
 
@@ -70,6 +104,11 @@ export class Game {
         }
         this.collisionSystem.check()
 
+        for (let text of this.floatingTexts) {
+            text.update(delta)
+        }
+        this.floatingTexts = this.floatingTexts.filter(t => t.life > 0)
+
     }
 
     render() {
@@ -85,6 +124,10 @@ export class Game {
     for (let laser of this.lasers) {
         laser.draw(this.ctx)
     }   
+
+    for (let text of this.floatingTexts) {
+        text.draw(this.ctx)
+    }
 
     }
 
@@ -114,5 +157,10 @@ export class Game {
 
         }
 
+    
+    this.ctx.fillStyle = "#111"
+    this.ctx.font = "20px Arial"
+
+    this.ctx.fillText("Points: " + this.points, 20, 30)
     }
 }

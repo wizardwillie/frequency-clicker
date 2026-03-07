@@ -31,7 +31,7 @@ export class SpawnSystem {
         const centerY = canvas.height / 2
         const spread = 220
 
-        const y = centerY + (Math.random() - 0.5) * spread
+        const y = Math.random() * canvas.height
 
         const direction = Math.random() < 0.5 ? 1 : -1
 

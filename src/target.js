@@ -10,7 +10,7 @@ export class Target {
 
         this.value = value
 
-        this.radius = 12
+        this.radius = 14
     }
 
     update(delta) {

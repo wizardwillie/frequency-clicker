@@ -1,3 +1,5 @@
+import { FloatingText } from "./floatingText.js"
+
 export class CollisionSystem {
 
     constructor(game) {
@@ -34,6 +36,14 @@ export class CollisionSystem {
 
                 if (distance < this.hitThreshold) {
 
+                    this.game.points += target.value
+                    this.game.floatingTexts.push(
+                        new FloatingText(
+                        target.x + (Math.random() - 0.5) * 10,
+                        target.y,
+                        "+" + target.value
+                        )
+                    )    
                     targets.splice(i, 1)
 
                 }
