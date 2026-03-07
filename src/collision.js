@@ -38,16 +38,25 @@ export class CollisionSystem {
                 if (distance < this.hitThreshold) {
 
                     if (target.health > 1) {
+                        target.hitFlashTime = target.hitFlashDuration
                         target.health -= 1
                         continue
                     }
 
                     this.game.points += target.value
+                    const rewardColor =
+                        target.type === "armored"
+                            ? "#8fff8f"
+                            : target.type === "highValue"
+                                ? "#ffd24a"
+                                : "#ffffff"
+
                     this.game.floatingTexts.push(
                         new FloatingText(
-                        target.x + (Math.random() - 0.5) * 10,
-                        target.y,
-                        "+" + target.value
+                        target.x + (Math.random() - 0.5) * 12,
+                        target.y + (Math.random() - 0.5) * 12,
+                        "+" + target.value,
+                        rewardColor
                         )
                     )    
                     targets.splice(i, 1)

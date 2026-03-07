@@ -1,11 +1,12 @@
 export class FloatingText {
 
-    constructor(x, y, text) {
+    constructor(x, y, text, color = "#222") {
 
         this.x = x
         this.y = y
 
         this.text = text
+        this.color = color
 
         this.life = 1
         this.speed = 40
@@ -24,7 +25,7 @@ export class FloatingText {
 
         ctx.globalAlpha = Math.max(this.life, 0)
 
-        ctx.fillStyle = "#222"
+        ctx.fillStyle = this.color
         ctx.font = "16px Arial"
 
         ctx.fillText(this.text, this.x, this.y)

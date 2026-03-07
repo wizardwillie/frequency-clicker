@@ -15,6 +15,8 @@ export class Laser {
         this.color = color
 
         this.active = false
+        this.flashDuration = 0.05
+        this.flashTime = 0
 
     }
 
@@ -23,6 +25,7 @@ export class Laser {
         this.x = 0
 
         this.active = true
+        this.flashTime = this.flashDuration
 
     }
 
@@ -31,6 +34,10 @@ export class Laser {
         if (!this.active) return
 
         this.x += this.speed * delta
+
+        if (this.flashTime > 0) {
+            this.flashTime = Math.max(0, this.flashTime - delta)
+        }
 
         if (this.x > this.game.gridWidth) {
 
@@ -60,10 +67,34 @@ export class Laser {
 
         }
 
+        ctx.save()
+        ctx.globalAlpha = 0.15
+        ctx.strokeStyle = this.color
+        ctx.lineWidth = this.width * 2.5
+        ctx.lineCap = "round"
+        ctx.stroke()
+        ctx.restore()
+
         ctx.strokeStyle = this.color
         ctx.lineWidth = this.width
+        ctx.lineCap = "round"
 
         ctx.stroke()
+
+        if (this.flashTime > 0) {
+
+            const flashAlpha = this.flashTime / this.flashDuration
+            const flashRadius = this.width * 1.8
+
+            ctx.save()
+            ctx.globalAlpha = flashAlpha * 0.9
+            ctx.fillStyle = "#ffffff"
+            ctx.beginPath()
+            ctx.arc(gridStartX, centerY, flashRadius, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.restore()
+
+        }
 
     }
 

@@ -1,4 +1,5 @@
 import { Target } from "./target.js"
+import { TARGET_BASE_SPAWN_RATE } from "./constants.js"
 
 export class SpawnSystem {
 
@@ -7,7 +8,7 @@ export class SpawnSystem {
         this.game = game
 
         this.spawnTimer = 0
-        this.spawnRate = 1
+        this.spawnRate = TARGET_BASE_SPAWN_RATE
 
     }
 
@@ -38,11 +39,11 @@ export class SpawnSystem {
         let valueMultiplier = 1
         let maxHealth = 1
 
-        if (roll < 0.1) {
+        if (roll < 0.06) {
             type = "armored"
             valueMultiplier = 3
             maxHealth = 3
-        } else if (roll < 0.2) {
+        } else if (roll < 0.16) {
             type = "highValue"
             valueMultiplier = 4
         }

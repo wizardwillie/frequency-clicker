@@ -14,11 +14,17 @@ export class Target {
         this.health = options.health ?? this.maxHealth
 
         this.radius = options.radius ?? (this.type === "armored" ? 18 : 14)
+        this.hitFlashDuration = 0.12
+        this.hitFlashTime = 0
     }
 
     update(delta) {
 
         this.x += this.speed * this.direction * delta
+
+        if (this.hitFlashTime > 0) {
+            this.hitFlashTime = Math.max(0, this.hitFlashTime - delta)
+        }
 
     }
 
@@ -30,6 +36,10 @@ export class Target {
             fillColor = "#56d17e"
         } else if (this.type === "highValue") {
             fillColor = "#ffd24a"
+        }
+
+        if (this.hitFlashTime > 0 && this.type === "armored") {
+            fillColor = "#b9ffce"
         }
 
         ctx.beginPath()
