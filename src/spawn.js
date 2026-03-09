@@ -6,6 +6,8 @@ import {
     TARGET_SHIELDED_CHANCE,
     TARGET_REFLECTOR_CHANCE,
     TARGET_SPLITTER_CHANCE,
+    TARGET_SWARM_CHANCE,
+    TARGET_BOSS_CHANCE,
     TARGET_ARMORED_CHANCE,
     TARGET_HIGH_VALUE_CHANCE,
     TARGET_FAST_CHANCE,
@@ -13,6 +15,8 @@ import {
     TARGET_SHIELDED_VALUE_MULTIPLIER,
     TARGET_REFLECTOR_VALUE_MULTIPLIER,
     TARGET_SPLITTER_VALUE_MULTIPLIER,
+    TARGET_SWARM_VALUE_MULTIPLIER,
+    TARGET_BOSS_VALUE_MULTIPLIER,
     TARGET_ARMORED_VALUE_MULTIPLIER,
     TARGET_HIGH_VALUE_VALUE_MULTIPLIER,
     TARGET_FAST_VALUE_MULTIPLIER,
@@ -20,9 +24,18 @@ import {
     TARGET_SHIELDED_HEALTH,
     TARGET_REFLECTOR_HEALTH,
     TARGET_SPLITTER_HEALTH,
+    TARGET_SWARM_HEALTH,
+    TARGET_BOSS_HEALTH,
     TARGET_FAST_HEALTH,
     TARGET_ARMORED_HEALTH,
     TARGET_REINFORCED_UNLOCK_LEVEL,
+    TARGET_FAST_UNLOCK_LEVEL,
+    TARGET_SHIELDED_UNLOCK_LEVEL,
+    TARGET_HEAVY_UNLOCK_LEVEL,
+    TARGET_SPLITTER_UNLOCK_LEVEL,
+    TARGET_SWARM_UNLOCK_LEVEL,
+    TARGET_REFLECTOR_UNLOCK_LEVEL,
+    TARGET_BOSS_UNLOCK_LEVEL,
     TARGET_REINFORCED_CHANCE,
     TARGET_REINFORCED_VALUE_MULTIPLIER,
     TARGET_REINFORCED_HEALTH,
@@ -30,10 +43,14 @@ import {
     TARGET_HEAVY_RADIUS,
     TARGET_REFLECTOR_RADIUS,
     TARGET_SPLITTER_RADIUS,
+    TARGET_SWARM_RADIUS,
+    TARGET_BOSS_RADIUS,
     TARGET_FAST_RADIUS,
     TARGET_HEAVY_SPEED_MULTIPLIER,
+    TARGET_SWARM_SPEED_MULTIPLIER,
+    TARGET_BOSS_SPEED_MULTIPLIER,
     TARGET_FAST_SPEED_MULTIPLIER,
-    TARGET_VALUE_HEALTH_SCALE_STEP,
+    TARGET_SWARM_GROUP_SIZE,
     MAX_ACTIVE_TARGETS
 } from "./constants.js"
 
@@ -63,95 +80,223 @@ export class SpawnSystem {
                 break
             }
 
-            this.spawnTarget()
+            const result = this.spawnTarget()
             this.spawnTimer -= spawnInterval
+
+            if (result.spawnedBoss) {
+                break
+            }
         }
 
     }
 
-    spawnTarget() {
+    getSpawnY(radius) {
 
         const canvas = this.game.canvas
+        const centerY = canvas.height / 2
+        const middleBandHalfHeight = this.game.laserAmplitude * 1.4
+        const middleBandMin = Math.max(radius, centerY - middleBandHalfHeight)
+        const middleBandMax = Math.min(canvas.height - radius, centerY + middleBandHalfHeight)
 
+        if (Math.random() < 0.6 && middleBandMax > middleBandMin) {
+            return middleBandMin + Math.random() * (middleBandMax - middleBandMin)
+        }
+
+        return radius + Math.random() * (canvas.height - radius * 2)
+
+    }
+
+    getSpawnX(direction, radius) {
+
+        return direction === 1
+            ? this.game.gridX + radius
+            : this.game.canvas.width - radius
+
+    }
+
+    spawnSwarmGroup(direction, baseSpeed, value, maxHealth, radius) {
+
+        const minX = this.game.gridX + radius
+        const maxX = this.game.canvas.width - radius
+        const minY = radius
+        const maxY = this.game.canvas.height - radius
+        const anchorX = this.getSpawnX(direction, radius)
+        const anchorY = this.getSpawnY(radius)
+
+        for (let i = 0; i < TARGET_SWARM_GROUP_SIZE; i++) {
+
+            if (this.game.targets.length >= MAX_ACTIVE_TARGETS) break
+
+            const offsetX = (Math.random() - 0.5) * 24
+            const offsetY = (Math.random() - 0.5) * 24
+            const speed = baseSpeed * TARGET_SWARM_SPEED_MULTIPLIER * (0.85 + Math.random() * 0.3)
+
+            const target = new Target(0, 0, direction, speed, value, {
+                type: "swarm",
+                maxHealth,
+                radius
+            })
+
+            target.x = Math.max(minX, Math.min(maxX, anchorX + offsetX))
+            target.y = Math.max(minY, Math.min(maxY, anchorY + offsetY))
+
+            this.game.targets.push(target)
+
+        }
+
+    }
+
+    spawnTarget(options = {}) {
+
+        if (this.game.targets.length >= MAX_ACTIVE_TARGETS) {
+            return { spawned: false, spawnedBoss: false }
+        }
+
+        const forceType = options.forceType || null
+        const allowBoss = options.allowBoss !== false
         const direction = Math.random() < 0.5 ? 1 : -1
-
         const baseSpeed = 100 + Math.random() * 100
-
-        const roll = Math.random()
         const baseValue = TARGET_VALUE_BASE
-        const diversityLevel = this.game.targetUpgradeSystem
-            ? this.game.targetUpgradeSystem.diversityLevel
-            : 0
-        const reinforcedChance = diversityLevel >= TARGET_REINFORCED_UNLOCK_LEVEL
-            ? TARGET_REINFORCED_CHANCE
-            : 0
-        const heavyThreshold = TARGET_HEAVY_CHANCE
-        const shieldedThreshold = heavyThreshold + TARGET_SHIELDED_CHANCE
-        const reflectorThreshold = shieldedThreshold + TARGET_REFLECTOR_CHANCE
-        const reinforcedThreshold = reflectorThreshold + reinforcedChance
-        const splitterThreshold = reinforcedThreshold + TARGET_SPLITTER_CHANCE
-        const armoredThreshold = splitterThreshold + TARGET_ARMORED_CHANCE
-        const highValueThreshold = armoredThreshold + TARGET_HIGH_VALUE_CHANCE
-        const fastThreshold = highValueThreshold + TARGET_FAST_CHANCE
-        let type = "basic"
+        const targetUpgrades = this.game.targetUpgradeSystem
+        const diversityLevel = targetUpgrades ? targetUpgrades.diversityLevel : 0
+        const weightedTypes = [
+            {
+                type: "boss",
+                chance: TARGET_BOSS_CHANCE,
+                unlocked: allowBoss && diversityLevel >= TARGET_BOSS_UNLOCK_LEVEL
+            },
+            {
+                type: "heavy",
+                chance: TARGET_HEAVY_CHANCE,
+                unlocked: diversityLevel >= TARGET_HEAVY_UNLOCK_LEVEL
+            },
+            {
+                type: "shielded",
+                chance: TARGET_SHIELDED_CHANCE,
+                unlocked: diversityLevel >= TARGET_SHIELDED_UNLOCK_LEVEL
+            },
+            {
+                type: "reflector",
+                chance: TARGET_REFLECTOR_CHANCE,
+                unlocked: diversityLevel >= TARGET_REFLECTOR_UNLOCK_LEVEL
+            },
+            {
+                type: "reinforced",
+                chance: TARGET_REINFORCED_CHANCE,
+                unlocked: diversityLevel >= TARGET_REINFORCED_UNLOCK_LEVEL
+            },
+            {
+                type: "splitter",
+                chance: TARGET_SPLITTER_CHANCE,
+                unlocked: diversityLevel >= TARGET_SPLITTER_UNLOCK_LEVEL
+            },
+            {
+                type: "swarm",
+                chance: TARGET_SWARM_CHANCE,
+                unlocked: diversityLevel >= TARGET_SWARM_UNLOCK_LEVEL
+            },
+            {
+                type: "armored",
+                chance: TARGET_ARMORED_CHANCE,
+                unlocked: true
+            },
+            {
+                type: "highValue",
+                chance: TARGET_HIGH_VALUE_CHANCE,
+                unlocked: true
+            },
+            {
+                type: "fast",
+                chance: TARGET_FAST_CHANCE,
+                unlocked: diversityLevel >= TARGET_FAST_UNLOCK_LEVEL
+            }
+        ]
+        let type = forceType || "basic"
+
+        if (!forceType) {
+            const availableTypes = weightedTypes.filter(entry => entry.unlocked)
+            const totalWeight = availableTypes.reduce((sum, entry) => sum + entry.chance, 0)
+
+            if (totalWeight > 0) {
+                let roll = Math.random() * totalWeight
+                for (const entry of availableTypes) {
+                    roll -= entry.chance
+                    if (roll <= 0) {
+                        type = entry.type
+                        break
+                    }
+                }
+            }
+        }
+
         let valueMultiplier = 1
         let maxHealth = 1
         let speed = baseSpeed
         let radius
         let hasShield = false
 
-        if (roll < heavyThreshold) {
-            type = "heavy"
+        if (type === "boss") {
+            valueMultiplier = TARGET_BOSS_VALUE_MULTIPLIER
+            maxHealth = TARGET_BOSS_HEALTH
+            radius = TARGET_BOSS_RADIUS
+            speed = baseSpeed * TARGET_BOSS_SPEED_MULTIPLIER
+        } else if (type === "heavy") {
             valueMultiplier = TARGET_HEAVY_VALUE_MULTIPLIER
             maxHealth = TARGET_HEAVY_HEALTH
             radius = TARGET_HEAVY_RADIUS
             speed = baseSpeed * TARGET_HEAVY_SPEED_MULTIPLIER
-        } else if (roll < shieldedThreshold) {
-            type = "shielded"
+        } else if (type === "shielded") {
             valueMultiplier = TARGET_SHIELDED_VALUE_MULTIPLIER
             maxHealth = TARGET_SHIELDED_HEALTH
             hasShield = true
-        } else if (roll < reflectorThreshold) {
-            type = "reflector"
+        } else if (type === "reflector") {
             valueMultiplier = TARGET_REFLECTOR_VALUE_MULTIPLIER
             maxHealth = TARGET_REFLECTOR_HEALTH
             radius = TARGET_REFLECTOR_RADIUS
-        } else if (roll < reinforcedThreshold) {
-            type = "reinforced"
+        } else if (type === "reinforced") {
             valueMultiplier = TARGET_REINFORCED_VALUE_MULTIPLIER
             maxHealth = TARGET_REINFORCED_HEALTH
             radius = TARGET_REINFORCED_RADIUS
-        } else if (roll < splitterThreshold) {
-            type = "splitter"
+        } else if (type === "splitter") {
             valueMultiplier = TARGET_SPLITTER_VALUE_MULTIPLIER
             maxHealth = TARGET_SPLITTER_HEALTH
             radius = TARGET_SPLITTER_RADIUS
-        } else if (roll < armoredThreshold) {
-            type = "armored"
+        } else if (type === "swarm") {
+            valueMultiplier = TARGET_SWARM_VALUE_MULTIPLIER
+            maxHealth = TARGET_SWARM_HEALTH
+            radius = TARGET_SWARM_RADIUS
+            speed = baseSpeed * TARGET_SWARM_SPEED_MULTIPLIER
+        } else if (type === "armored") {
             valueMultiplier = TARGET_ARMORED_VALUE_MULTIPLIER
             maxHealth = TARGET_ARMORED_HEALTH
-        } else if (roll < highValueThreshold) {
-            type = "highValue"
+        } else if (type === "highValue") {
             valueMultiplier = TARGET_HIGH_VALUE_VALUE_MULTIPLIER
-        } else if (roll < fastThreshold) {
-            type = "fast"
+        } else if (type === "fast") {
             valueMultiplier = TARGET_FAST_VALUE_MULTIPLIER
             maxHealth = TARGET_FAST_HEALTH
             radius = TARGET_FAST_RADIUS
             speed = baseSpeed * TARGET_FAST_SPEED_MULTIPLIER
         }
 
-        const valueMultiplierFromUpgrades = this.game.targetUpgradeSystem
-            ? this.game.targetUpgradeSystem.getValueMultiplier()
+        const valueMultiplierFromUpgrades = targetUpgrades
+            ? targetUpgrades.getValueMultiplier()
             : 1
-        const healthMultiplier = this.game.targetUpgradeSystem
-            ? 1 + (this.game.targetUpgradeSystem.valueLevel * TARGET_VALUE_HEALTH_SCALE_STEP)
-            : 1
+        const valueLevel = targetUpgrades ? targetUpgrades.valueLevel : 0
+        const spawnRateLevel = targetUpgrades ? targetUpgrades.spawnRateLevel : 0
+        const healthMultiplier =
+            1 +
+            (valueLevel * 0.15) +
+            (spawnRateLevel * 0.25)
         maxHealth = Math.max(1, Math.round(maxHealth * healthMultiplier))
         const value = Math.max(
             1,
             Math.round(baseValue * valueMultiplier * valueMultiplierFromUpgrades)
         )
+
+        if (type === "swarm") {
+            this.spawnSwarmGroup(direction, baseSpeed, value, maxHealth, radius)
+            return { spawned: true, spawnedBoss: false }
+        }
 
         const target = new Target(0, 0, direction, speed, value, {
             type,
@@ -160,22 +305,12 @@ export class SpawnSystem {
             hasShield
         })
 
-        const centerY = canvas.height / 2
-        const middleBandHalfHeight = this.game.laserAmplitude * 1.4
-        const middleBandMin = Math.max(target.radius, centerY - middleBandHalfHeight)
-        const middleBandMax = Math.min(canvas.height - target.radius, centerY + middleBandHalfHeight)
-
-        if (Math.random() < 0.6 && middleBandMax > middleBandMin) {
-            target.y = middleBandMin + Math.random() * (middleBandMax - middleBandMin)
-        } else {
-            target.y = target.radius + Math.random() * (canvas.height - target.radius * 2)
-        }
-
-        target.x = direction === 1
-            ? this.game.gridX + target.radius
-            : canvas.width - target.radius
+        target.y = this.getSpawnY(target.radius)
+        target.x = this.getSpawnX(direction, target.radius)
 
         this.game.targets.push(target)
+
+        return { spawned: true, spawnedBoss: type === "boss" }
 
     }
 

@@ -6,7 +6,8 @@ import {
     TARGET_FAST_HEALTH,
     TARGET_FAST_RADIUS,
     TARGET_FAST_SPEED_MULTIPLIER,
-    MAX_ACTIVE_TARGETS
+    MAX_ACTIVE_TARGETS,
+    MAX_REFLECTED_LASERS_PER_FRAME
 } from "./constants.js"
 
 export class CollisionSystem {
@@ -122,6 +123,81 @@ export class CollisionSystem {
 
     }
 
+    spawnExplosionParticles(x, y, particleCount, color) {
+
+        for (let i = 0; i < particleCount; i++) {
+            const angle = Math.random() * Math.PI * 2
+            const speed = 60 + Math.random() * 90
+            const particle = {
+                x,
+                y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                radius: 1.5 + Math.random() * 2,
+                life: 0.28,
+                maxLife: 0.28,
+                color,
+                update(delta) {
+                    this.x += this.vx * delta
+                    this.y += this.vy * delta
+                    this.life -= delta
+                },
+                draw(ctx) {
+                    ctx.save()
+                    ctx.globalAlpha = Math.max(this.life / this.maxLife, 0)
+                    ctx.fillStyle = this.color
+                    ctx.beginPath()
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.restore()
+                }
+            }
+
+            this.game.floatingTexts.push(particle)
+        }
+
+    }
+
+    spawnSplitterExplosionParticles(x, y) {
+
+        this.spawnExplosionParticles(x, y, 6, "#ffbf72")
+
+    }
+
+    spawnBossDeathBurst(sourceTarget) {
+
+        const spawnSystem = this.game.spawnSystem
+
+        for (let i = 0; i < 10; i++) {
+            spawnSystem.spawnTarget({ allowBoss: false })
+        }
+
+        spawnSystem.spawnTarget({ forceType: "splitter", allowBoss: false })
+        spawnSystem.spawnTarget({ forceType: "swarm", allowBoss: false })
+
+        this.spawnExplosionParticles(sourceTarget.x, sourceTarget.y, 15, "#ff6a6a")
+
+        this.game.floatingTexts.push({
+            x: sourceTarget.x - 72,
+            y: sourceTarget.y - 12,
+            life: 1.1,
+            speed: 36,
+            update(delta) {
+                this.y -= this.speed * delta
+                this.life -= delta
+            },
+            draw(ctx) {
+                ctx.save()
+                ctx.globalAlpha = Math.max(this.life, 0)
+                ctx.fillStyle = "#ff4a4a"
+                ctx.font = "bold 32px Arial"
+                ctx.fillText("MEGA KILL", this.x, this.y)
+                ctx.restore()
+            }
+        })
+
+    }
+
     check() {
 
         const lasers = this.game.lasers
@@ -155,7 +231,21 @@ export class CollisionSystem {
                 if (distance < this.hitThreshold) {
 
                     if (target.type === "reflector") {
-                        pendingReflectedLasers.push(this.createReflectedLaser(target, laser))
+                        const reflectionRoll = Math.random()
+                        let reflectionCount = 1
+
+                        if (reflectionRoll < 0.10) {
+                            reflectionCount = 3
+                        } else if (reflectionRoll < 0.40) {
+                            reflectionCount = 2
+                        }
+
+                        const remainingSlots = MAX_REFLECTED_LASERS_PER_FRAME - pendingReflectedLasers.length
+                        const spawnCount = Math.max(0, Math.min(reflectionCount, remainingSlots))
+
+                        for (let j = 0; j < spawnCount; j++) {
+                            pendingReflectedLasers.push(this.createReflectedLaser(target, laser))
+                        }
                     }
 
                     if (target.hasShield) {
@@ -181,7 +271,12 @@ export class CollisionSystem {
                     }
 
                     if (target.type === "splitter") {
+                        this.spawnSplitterExplosionParticles(target.x, target.y)
                         this.spawnSplitterFragments(target)
+                    }
+
+                    if (target.type === "boss") {
+                        this.spawnBossDeathBurst(target)
                     }
 
                     this.game.points += target.value
@@ -198,6 +293,10 @@ export class CollisionSystem {
                                             ? "#8cefff"
                                             : target.type === "splitter"
                                                 ? "#ffd085"
+                                                : target.type === "swarm"
+                                                    ? "#ffc284"
+                                                    : target.type === "boss"
+                                                        ? "#ff4a4a"
                                         : target.type === "highValue"
                                             ? "#ffd24a"
                                             : target.type === "fast"

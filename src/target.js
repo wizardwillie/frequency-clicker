@@ -20,6 +20,8 @@ export class Target {
             shielded: 15,
             reflector: 18,
             splitter: 20,
+            swarm: 6,
+            boss: 48,
             fast: 10
         }
         const defaultRadius = defaultRadiusByType[this.type] ?? 14
@@ -87,6 +89,18 @@ export class Target {
             healthBarBackground = "#36230f"
             healthBarFill = "#ffd085"
             drawStroke = true
+        } else if (this.type === "swarm") {
+            fillColor = "#ffb45f"
+            strokeColor = "#7a3b00"
+            strokeWidth = 1.5
+            drawStroke = true
+        } else if (this.type === "boss") {
+            fillColor = "#5c0d18"
+            strokeColor = "#0b0b0b"
+            strokeWidth = 7
+            healthBarBackground = "#2d0d14"
+            healthBarFill = "#ff5a6f"
+            drawStroke = true
         } else if (this.type === "fast") {
             fillColor = "#ff8a2a"
             strokeColor = "#9e4a08"
@@ -108,6 +122,10 @@ export class Target {
             fillColor = "#d7fdff"
         } else if (this.hitFlashTime > 0 && this.type === "splitter") {
             fillColor = "#ffd37a"
+        } else if (this.hitFlashTime > 0 && this.type === "swarm") {
+            fillColor = "#ffd8a8"
+        } else if (this.hitFlashTime > 0 && this.type === "boss") {
+            fillColor = "#a81e2f"
         } else if (this.hitFlashTime > 0 && this.type === "fast") {
             fillColor = "#ffbd85"
         }
@@ -155,10 +173,11 @@ export class Target {
 
         if (this.maxHealth > 1) {
 
-            const barWidth = this.radius * 2
-            const barHeight = 4
-            const barX = this.x - this.radius
-            const barY = this.y - this.radius - 10
+            const isBoss = this.type === "boss"
+            const barWidth = isBoss ? this.radius * 2.6 : this.radius * 2
+            const barHeight = isBoss ? 10 : 4
+            const barX = this.x - (barWidth / 2)
+            const barY = isBoss ? this.y - this.radius - 22 : this.y - this.radius - 10
             const healthRatio = this.health / this.maxHealth
 
             ctx.fillStyle = healthBarBackground
