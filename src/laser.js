@@ -12,6 +12,7 @@ export class Laser {
         this.frequency = this.game.laserFrequency
         this.amplitude = this.game.laserAmplitude
         this.width = this.game.laserWidth
+        this.strength = this.game.laserStrength
         const laserType = LASER_TYPES[this.game.currentLaserType]
         this.glowMultiplier = laserType?.glowMultiplier ?? 1
         this.flashMultiplier = laserType?.flashMultiplier ?? 1

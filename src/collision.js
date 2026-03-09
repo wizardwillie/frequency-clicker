@@ -39,9 +39,25 @@ export class CollisionSystem {
 
                 if (distance < this.hitThreshold) {
 
-                    if (target.health > 1) {
+                    if (target.hasShield) {
+                        target.hasShield = false
                         target.hitFlashTime = target.hitFlashDuration
-                        target.health -= 1
+                        this.game.floatingTexts.push(
+                            new FloatingText(
+                                target.x + (Math.random() - 0.5) * 12,
+                                target.y + (Math.random() - 0.5) * 12,
+                                "Shield!",
+                                "#9cd1ff"
+                            )
+                        )
+                        continue
+                    }
+
+                    const damage = Math.max(1, laser.strength || 1)
+                    target.hitFlashTime = target.hitFlashDuration
+                    target.health -= damage
+
+                    if (target.health > 0) {
                         continue
                     }
 
@@ -49,9 +65,17 @@ export class CollisionSystem {
                     const rewardColor =
                         target.type === "armored"
                             ? "#8fff8f"
-                            : target.type === "highValue"
-                                ? "#ffd24a"
-                                : "#ffffff"
+                            : target.type === "reinforced"
+                                ? "#f08bff"
+                                : target.type === "heavy"
+                                    ? "#ff7a7a"
+                                    : target.type === "shielded"
+                                        ? "#8bc7ff"
+                                        : target.type === "highValue"
+                                            ? "#ffd24a"
+                                            : target.type === "fast"
+                                                ? "#ffad66"
+                                                : "#ffffff"
 
                     this.game.floatingTexts.push(
                         new FloatingText(

@@ -11,7 +11,9 @@ import {
     AUTO_FIRE_COST,
     AUTO_FIRE_SPEED_MULTIPLIER,
     BASE_MANUAL_FIRE_COOLDOWN,
-    DEV_STARTING_POINTS
+    DEV_STARTING_POINTS,
+    LASER_BASE_STRENGTH,
+    MAX_LASER_STRENGTH
 } from "./constants.js"
 
 export class Game {
@@ -87,27 +89,33 @@ export class Game {
             width: this.panelWidth - 40,
             height: 72
         }
+        this.strengthButton = {
+            x: 20,
+            y: 450,
+            width: this.panelWidth - 40,
+            height: 72
+        }
         this.targetValueButton = {
             x: 20,
-            y: 480,
+            y: 560,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetSpawnRateButton = {
             x: 20,
-            y: 550,
+            y: 630,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetDiversityButton = {
             x: 20,
-            y: 620,
+            y: 700,
             width: this.panelWidth - 40,
             height: 60
         }
         this.autoFireButton = {
             x: 20,
-            y: 710,
+            y: 790,
             width: this.panelWidth - 40,
             height: 30
         }
@@ -133,7 +141,8 @@ export class Game {
                 frequency: laserType.baseFrequency,
                 amplitude: laserType.baseAmplitude,
                 width: laserType.baseWidth,
-                fireRate: laserType.baseFireRate
+                fireRate: laserType.baseFireRate,
+                strength: LASER_BASE_STRENGTH
             }
         }
 
@@ -166,6 +175,12 @@ export class Game {
                 get: () => this.laserTypeStats[this.currentLaserType].fireRate,
                 set: (value) => {
                     this.laserTypeStats[this.currentLaserType].fireRate = value
+                }
+            },
+            laserStrength: {
+                get: () => this.laserTypeStats[this.currentLaserType].strength,
+                set: (value) => {
+                    this.laserTypeStats[this.currentLaserType].strength = value
                 }
             }
         })
@@ -305,6 +320,11 @@ export class Game {
 
         if (this.autoFireUnlocked && this.isInsideButton(mouseX, mouseY, this.fireRateButton)) {
             this.upgradeSystem.buy("fireRate")
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, this.strengthButton)) {
+            this.upgradeSystem.buy("strength")
             return
         }
 
@@ -549,7 +569,7 @@ export class Game {
         ctx.font = "20px Arial"
 
         ctx.fillText("Points: " + this.points, 20, 40)
-        this.drawPanelSectionHeader("LASERS", 20, this.unlockButton.y - 30)
+        this.drawPanelSectionHeader("LASERS", 20, this.unlockButton.y - 44)
 
         if (!this.hasLaser) {
 
@@ -605,10 +625,12 @@ export class Game {
             const frequencyCost = this.upgradeSystem.getFrequencyCost()
             const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
             const fireRateCost = this.upgradeSystem.getFireRateCost()
+            const strengthCost = this.upgradeSystem.getStrengthCost()
+            const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
             const targetValueCost = this.targetUpgradeSystem.getValueCost()
             const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
             const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
-            this.drawPanelSectionHeader("LASER UPGRADES", 20, this.frequencyButton.y - 10)
+            this.drawPanelSectionHeader("LASER UPGRADES", 20, this.frequencyButton.y - 44)
 
             this.drawPanelButton(
                 this.frequencyButton,
@@ -636,7 +658,15 @@ export class Game {
                 )
             }
 
-            this.drawPanelSectionHeader("TARGET ECONOMY", 20, this.targetValueButton.y - 24)
+            this.drawPanelButton(
+                this.strengthButton,
+                "Increase Laser Strength",
+                strengthCost,
+                this.upgradeSystem.strengthLevel,
+                !strengthMaxed && this.points >= strengthCost
+            )
+
+            this.drawPanelSectionHeader("TARGET ECONOMY", 20, this.targetValueButton.y - 44)
             this.drawPanelButton(
                 this.targetValueButton,
                 "Increase Target Value",
@@ -661,7 +691,7 @@ export class Game {
                 this.points >= targetDiversityCost
             )
 
-            this.drawPanelSectionHeader("AUTOMATION", 20, this.autoFireButton.y - 10)
+            this.drawPanelSectionHeader("AUTOMATION", 20, this.autoFireButton.y - 44)
             if (!this.autoFireUnlocked) {
                 this.drawPanelActionButton(
                     this.autoFireButton,

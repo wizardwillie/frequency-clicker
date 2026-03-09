@@ -3,12 +3,15 @@ import {
     FREQUENCY_UPGRADE_BASE,
     AMPLITUDE_UPGRADE_BASE,
     FIRERATE_UPGRADE_BASE,
+    LASER_STRENGTH_UPGRADE_BASE,
     FREQUENCY_UPGRADE_STEP,
     FREQUENCY_UPGRADE_AMPLITUDE_BONUS,
     FREQUENCY_UPGRADE_WIDTH_BONUS,
     MAX_LASER_WIDTH,
     AMPLITUDE_UPGRADE_STEP,
-    FIRERATE_UPGRADE_STEP
+    FIRERATE_UPGRADE_STEP,
+    LASER_STRENGTH_UPGRADE_STEP,
+    MAX_LASER_STRENGTH
 } from "./constants.js"
 
 export class UpgradeSystem {
@@ -19,6 +22,7 @@ export class UpgradeSystem {
         this.frequencyLevel = 0
         this.amplitudeLevel = 0
         this.fireRateLevel = 0
+        this.strengthLevel = 0
 
     }
 
@@ -46,6 +50,12 @@ export class UpgradeSystem {
 
     }
 
+    getStrengthCost() {
+
+        return this.getScaledCost(LASER_STRENGTH_UPGRADE_BASE, this.strengthLevel)
+
+    }
+
     buy(type) {
 
         if (type === "frequency") {
@@ -58,6 +68,10 @@ export class UpgradeSystem {
 
         if (type === "fireRate") {
             return this.buyFireRate()
+        }
+
+        if (type === "strength") {
+            return this.buyStrength()
         }
 
         return false
@@ -118,6 +132,25 @@ export class UpgradeSystem {
         this.fireRateLevel += 1
         stats.fireRate += FIRERATE_UPGRADE_STEP
         this.game.fireInterval = 1 / stats.fireRate
+
+        return true
+
+    }
+
+    buyStrength() {
+
+        const stats = this.getActiveLaserStats()
+
+        if (stats.strength >= MAX_LASER_STRENGTH) return false
+
+        const cost = this.getStrengthCost()
+
+        if (this.game.points < cost) return false
+
+        this.game.points -= cost
+        this.strengthLevel += 1
+        stats.strength += LASER_STRENGTH_UPGRADE_STEP
+        stats.strength = Math.min(stats.strength, MAX_LASER_STRENGTH)
 
         return true
 
