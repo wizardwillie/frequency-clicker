@@ -1,62 +1,31 @@
-# Frequency Laser Clicker – Balance Notes
+# Balance Reference (Current)
 
-These numbers define the starting gameplay feel.
+All authoritative values are in `src/constants.js`.
 
----
+## Key Current Values
 
-## Starting Player State
+- `SIMPLE_LASER_COST = 10`
+- `PLASMA_UNLOCK_POINTS = 1000`
+- `AUTO_FIRE_COST = 250`
+- `AUTO_FIRE_SPEED_MULTIPLIER = 1.6`
+- `BASE_MANUAL_FIRE_COOLDOWN = 0.15`
 
-Laser Owned: False
+Laser bases:
+- `LASER_BASE_FREQUENCY = 0.005`
+- `LASER_BASE_AMPLITUDE = 50`
+- `LASER_BASE_WIDTH = 3`
+- `LASER_BASE_FIRE_RATE = 4`
 
-Starting Mechanics:
-- Player clicks targets manually
-- No laser available
+Target economy:
+- `TARGET_BASE_SPAWN_RATE = 1`
+- `TARGET_VALUE_BASE = 1`
+- `MAX_ACTIVE_TARGETS = 120`
 
----
+Upgrade growth:
+- `UPGRADE_GROWTH = 1.35`
 
-## Simple Laser
+## Notes
 
-Purchase Cost: 10
-
-Base Stats:
-
-frequency = 0.006
-amplitude = 50
-speed = 600
-
----
-
-## Target Spawn
-
-spawnRate = 0.8 targets/sec
-
-targetRadius = 10
-
-Base Value = 1
-
----
-
-## Upgrade Economy
-
-Cost formula:
-
-cost = baseCost * growth^level
-
-Example:
-
-Frequency Upgrade
-baseCost = 10
-growth = 1.35
-
----
-
-## Future Balance Targets
-
-Early Game:
-slow progression
-
-Mid Game:
-steady automation
-
-Late Game:
-chaotic screen activity
+- Costs generally scale with `floor(baseCost * growth^level)`.
+- Spawn and reward outputs are further modified by target economy upgrades.
+- Keep this file synced when constants change.

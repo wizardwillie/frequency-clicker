@@ -1,116 +1,162 @@
 # Architecture
 
 ## Overview
-Frequency Laser Clicker is a modular HTML/CSS/JavaScript canvas game. `game.js` owns runtime state and coordinates system modules in `/src`.
+
+Frequency Laser Clicker uses a modular, file-per-system structure around a single `Game` orchestrator.
+
+- Runtime owner: `src/game.js`
+- Rendering: Canvas draw methods in entities + panel rendering in `game.js`
+- Configuration: `src/constants.js` and `src/laserTypes.js`
 
 ## Game Loop
-`main.js` creates the canvas and `Game` instance, then calls `game.start()`.
 
-### Update Cycle (`game.js`)
-Per frame, `Game.update(delta)` runs:
+`src/main.js` creates canvas + `Game`, then calls `game.start()`.
+
+`Game.loop(time)` computes `delta` and executes:
+- `update(delta)`
+- `render()`
+
+### `game.js` Responsibilities
+
+- Own global state (`points`, unlock flags, arrays of entities)
+- Maintain playfield geometry (`panelWidth`, `gridX`, `gridWidth`)
+- Route input:
+  - panel click handling
+  - grid click handling
+  - panel wheel scrolling
+- Coordinate systems:
+  - `SpawnSystem`
+  - `CollisionSystem`
+  - `UpgradeSystem`
+  - `TargetUpgradeSystem`
+- Manage laser-type stat containers and active type switching
+
+### Update Cycle
+
+`Game.update(delta)` currently does:
 1. `spawnSystem.update(delta)`
 2. `updateAutoFire()`
-3. Update active lasers and cull inactive ones
-4. Update targets
+3. Laser updates + inactive laser cull
+4. Target updates
 5. `collisionSystem.check()`
-6. Update floating texts and cull expired ones
+6. Floating text updates + expiration cull
 
-### Render Cycle (`game.js`)
-Per frame, `Game.render()` runs:
+### Render Cycle
+
+`Game.render()` currently does:
 1. Clear canvas
-2. Draw panel (left)
-3. Draw grid (right playfield)
+2. Draw left panel (`drawPanel()`)
+3. Draw grid (`drawGrid()`)
 4. Draw targets
 5. Draw lasers
 6. Draw floating texts
 
 ## Core Systems
 
-### Game (`game.js`)
-Responsibilities:
-- Own global state (`points`, entities, unlocks, active laser type)
-- Route panel vs grid input
-- Maintain panel scrolling state and clipping
-- Own per-laser-type mutable stat containers (`laserTypeStats`)
-- Instantiate and coordinate all systems
+## SpawnSystem (`src/spawn.js`)
 
-### SpawnSystem (`spawn.js`)
 Responsibilities:
-- Maintain spawn timer
-- Apply spawn rate multipliers from `TargetUpgradeSystem`
-- Enforce `MAX_ACTIVE_TARGETS`
-- Spawn weighted target types (basic/high-value/armored/reinforced)
-- Apply value multipliers and diversity unlock rules
-- Bias Y spawn distribution toward center wave band
+- Maintains spawn timer
+- Reads spawn multiplier from `TargetUpgradeSystem`
+- Uses interval-based while-loop spawning
+- Enforces `MAX_ACTIVE_TARGETS`
+- Spawns target types by weighted probabilities
+- Applies value multiplier from target value upgrades
+- Biases Y positions toward center wave band
 
-### CollisionSystem (`collision.js`)
-Responsibilities:
-- Laser-vs-target checks in grid-local X space
-- Early-out by wave vertical reach
-- Health reduction for multi-hit targets
-- Reward awarding and colored floating text on kill
+Inputs:
+- `game.targetUpgradeSystem`
+- constants from `constants.js`
 
-### UpgradeSystem (`upgrades.js`)
-Responsibilities:
-- Track laser upgrade levels
-- Exponential laser upgrade costs
-- Apply upgrades to active laser-type stat object
-- Clamp max laser width
+Outputs:
+- pushes `Target` entities into `game.targets`
 
-### TargetUpgradeSystem (`targetUpgrades.js`)
+## CollisionSystem (`src/collision.js`)
+
 Responsibilities:
-- Track economy upgrade levels
-- Exponential economy upgrade costs
-- Provide value and spawn rate multipliers
-- Unlock reinforced target tier via diversity level
+- Iterates active lasers vs targets
+- Converts target X into grid-local space
+- Early-outs by vertical reach before sine math
+- Applies hit threshold test against wave Y
+- Handles multi-hit damage logic
+- Awards points + colored floating text on destroy
+
+## UpgradeSystem (`src/upgrades.js`)
+
+Responsibilities:
+- Tracks laser upgrade levels
+- Computes exponential costs
+- Applies effects to active laser-type stat object
+- Recomputes `game.fireInterval` for fire-rate upgrades
+- Clamps laser width
+
+## TargetUpgradeSystem (`src/targetUpgrades.js`)
+
+Responsibilities:
+- Tracks economy upgrade levels
+- Computes exponential costs
+- Provides `valueMultiplier`
+- Provides `spawnRateMultiplier`
+- Provides diversity level for reinforced target unlock
 
 ## Entity Systems
 
-### Laser (`laser.js`)
-Entity fields include:
-- Position progress (`x`), speed
-- Wave parameters (`frequency`, `amplitude`, `width`)
-- Visual settings (`color`, glow/flash multipliers)
-- Active state and muzzle flash timer
+## Laser (`src/laser.js`)
 
-Draw behavior:
-- Wave polyline through the playfield
-- Glow stroke + core stroke
-- Muzzle flash at playfield origin
+Responsibilities:
+- Stores per-shot wave parameters and visual parameters
+- Progresses beam across playfield over time
+- Draws:
+  - glow pass
+  - core pass
+  - muzzle flash
 
-### Target (`target.js`)
-Entity fields include:
-- Position, speed, direction
-- Type (`basic`, `highValue`, `armored`, `reinforced`)
-- Value, health/maxHealth, radius
-- Hit flash timing
+Per-shot visual identity is copied from active `LASER_TYPES` entry (`glowMultiplier`, `flashMultiplier`).
 
-Draw behavior varies by type and includes health bars for armored/reinforced.
+## Target (`src/target.js`)
 
-### FloatingText (`floatingText.js`)
-Simple UI entity for transient reward labels with upward drift + fade-out.
+Responsibilities:
+- Moves horizontally each frame
+- Tracks type/value/health/radius
+- Tracks hit flash timer for damage feedback
+- Draws type-specific style
+- Draws health bars for armored/reinforced targets
+
+## FloatingText (`src/floatingText.js`)
+
+Responsibilities:
+- Stores text + color + lifetime
+- Animates upward movement and alpha fade
+- Draws transient reward feedback
 
 ## Configuration
 
-### constants.js
-Single source of gameplay/balance values:
-- Costs and growth factors
-- Base laser stats
-- Target spawn/value/health probabilities
-- Upgrade step values
-- Caps and dev toggles (e.g., `MAX_ACTIVE_TARGETS`, `DEV_STARTING_POINTS`)
+## constants.js (`src/constants.js`)
 
-### laserTypes.js
-Defines laser tiers and base identity:
-- Base stat set for each tier
-- Color palettes
-- Glow/flash intensity multipliers
+Single source for:
+- costs
+- growth factors
+- base stats
+- upgrade steps
+- spawn probabilities
+- health/value multipliers
+- caps/dev settings
+
+## laserTypes.js (`src/laserTypes.js`)
+
+Defines each laser type’s:
+- id and name
+- base frequency/amplitude/width/fireRate
+- color palette
+- visual intensity multipliers (glow/flash)
 
 ## Module Interaction
-High-level data flow:
-1. `Game` holds shared runtime state.
-2. Systems read/write through `game` reference.
-3. `SpawnSystem` creates `Target` entities using constants + target upgrade multipliers.
-4. `Game` creates `Laser` entities using active laser-type stats.
-5. `CollisionSystem` consumes active lasers/targets and updates points + floating text.
-6. Panel actions call `UpgradeSystem` / `TargetUpgradeSystem` to mutate progression values.
+
+High-level flow:
+1. `Game` owns shared state.
+2. Systems receive `game` reference in constructors.
+3. `SpawnSystem` creates `Target` instances from constants + target economy multipliers.
+4. `Game` creates `Laser` instances from active laser stats + laser type visuals.
+5. `CollisionSystem` resolves interactions and updates `game.points` / `game.floatingTexts`.
+6. Upgrade systems mutate progression values consumed by spawn and firing systems.
+7. `drawPanel()` renders progression UI in a scrollable clipped region.

@@ -1,44 +1,61 @@
 # AGENTS
 
 ## Project Purpose
-Frequency Laser Clicker is a modular browser incremental game focused on wave-laser combat, progression upgrades, and scalable target economy systems.
+
+Frequency Laser Clicker is a modular browser incremental game with:
+- sine-wave laser combat
+- multi-tier laser progression
+- target-economy progression
+- panel-driven progression UI
 
 ## Architecture Rules
-- `game.js` owns global runtime state and orchestrates systems.
-- System logic should stay modular in dedicated files.
-- Entity rendering stays in entity draw methods (`laser.js`, `target.js`, `floatingText.js`).
-- Balance/config values belong in `constants.js`.
-- Laser tier definitions belong in `laserTypes.js`.
 
-## File Ownership Guidance
-- **State + routing + loop**: `game.js`
-- **Spawn logic**: `spawn.js`
-- **Collision logic**: `collision.js`
-- **Laser upgrades**: `upgrades.js`
-- **Target economy upgrades**: `targetUpgrades.js`
-- **Entity visuals/behavior**: `laser.js`, `target.js`, `floatingText.js`
+- `game.js` owns runtime state and system orchestration.
+- Rendering should stay in draw functions.
+- Configuration values belong in `constants.js`.
+- Laser-tier base definitions belong in `laserTypes.js`.
+- New gameplay systems should be modular and file-scoped.
 
-## Keep These Files Focused
-- Do not overload `game.js` with detailed algorithmic logic.
-- Do not move constants into random modules.
-- Do not implement target rendering logic outside `target.js`.
-- Do not implement laser rendering logic outside `laser.js`.
+## File Responsibility Guardrails
+
+- Keep `game.js` from becoming algorithm-heavy.
+- Keep collision math in `collision.js`.
+- Keep spawn rules in `spawn.js`.
+- Keep laser upgrade logic in `upgrades.js`.
+- Keep target-economy upgrade logic in `targetUpgrades.js`.
+- Keep target visuals and per-type rendering in `target.js`.
+- Keep laser visuals in `laser.js`.
+
+## State and Data Ownership
+
+- Global runtime state: `game.js`
+- Entities:
+  - lasers in `game.lasers`
+  - targets in `game.targets`
+  - floating texts in `game.floatingTexts`
+- Per-laser-type mutable stats: `game.laserTypeStats`
 
 ## Rules for Adding New Systems
+
 1. Add/extend constants first.
 2. Implement behavior in a dedicated module.
-3. Wire module into `game.js` orchestration.
-4. Add panel input/draw wiring if needed.
-5. Update documentation to match code.
+3. Wire module through `game.js`.
+4. Add UI controls in panel draw + panel click routes.
+5. Verify panel scroll and click coordinate alignment.
+6. Update docs in root and `docs/` as needed.
 
-## Practical Agent Checklist
-Before shipping a change:
-- Confirm panel and grid coordinate spaces are handled correctly.
-- Confirm scrolling UI hit detection still aligns with visual positions.
-- Confirm new upgrades use exponential cost scaling when appropriate.
-- Confirm target and laser systems remain bounded/performance-safe.
-- Confirm docs reflect the new behavior.
+## Performance Rules
 
-## Current Placeholders
-- `src/economy.js` and `src/ui.js` are currently placeholders.
-- Keep future implementations modular; do not collapse them into `game.js`.
+- Prefer early-outs before expensive math.
+- Keep active-entity caps where needed.
+- Avoid unnecessary per-frame allocations in hot paths.
+
+## Documentation Rule
+
+When gameplay/architecture changes, update:
+- `README.md`
+- `ARCHITECTURE.md`
+- `GAMEPLAY.md`
+- `DEVELOPMENT.md`
+- `AGENTS.md`
+- any affected files in `docs/`

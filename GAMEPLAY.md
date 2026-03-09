@@ -1,87 +1,127 @@
 # Gameplay
 
 ## Core Loop
-1. Targets enter from left/right edges.
-2. Player clicks targets for points.
-3. Laser unlocks and can be fired manually.
-4. Laser kills produce rewards and accelerate progression.
-5. Upgrades increase combat and economy output.
-6. Auto-fire adds automation and steady scaling.
+
+1. Targets spawn and cross the playfield.
+2. Player clicks targets for early points.
+3. Player unlocks laser combat.
+4. Player fires sine-wave lasers to clear targets.
+5. Player upgrades combat and economy systems.
+6. Player unlocks auto-fire and continues scaling.
+7. Player unlocks/switches laser tiers for stronger visuals/stats.
 
 ## Laser Mechanics
 
-### Sine Wave Behavior
-Laser vertical path follows:
-`y = centerY + sin(frequency * x + phase) * amplitude`
+## Sine Wave Laser
 
-Key variables:
-- **Frequency**: wave density
-- **Amplitude**: wave vertical reach
-- **Width**: beam thickness
-- **Fire rate**: shots per second
+Laser Y is sampled by:
+- `y = centerY + sin(frequency * x + phase) * amplitude`
 
-### Manual Firing
-- Triggered by grid click (if not clicking a target first).
-- Uses a manual cooldown derived from base manual cooldown and current fire-rate progression.
+Main parameters:
+- frequency: controls oscillation density
+- amplitude: controls vertical reach
+- width: controls beam thickness
+- fire rate: controls shot cadence
 
-### Auto Fire
-- Unlock/purchase in panel.
-- Fires automatically with a slower interval than baseline manual cadence.
-- Uses its own timer, separate from manual shots.
+## Manual Firing
 
-### Laser Tiers
-- **Simple** and **Plasma** currently implemented.
-- Each tier has independent mutable stats in `game.laserTypeStats`.
-- Switching tier swaps which stat container upgrades apply to.
+- Triggered from grid clicks.
+- Uses manual cooldown:
+  - base from `BASE_MANUAL_FIRE_COOLDOWN`
+  - reduced by fire-rate progression relative to current laser type base stat.
+- Clicking a target directly still grants points and consumes the click first.
+
+## Auto Fire
+
+- Purchased once from panel.
+- Fires repeatedly while enabled.
+- Auto interval uses:
+  - `game.fireInterval * AUTO_FIRE_SPEED_MULTIPLIER`
+
+## Laser Types
+
+Current tiers:
+- Simple Laser
+  - baseline combat profile
+  - cooler color palette
+- Plasma Laser
+  - stronger base combat profile
+  - stronger glow/flash intensity
+  - warmer color palette
+
+Each tier keeps independent mutable stats in `game.laserTypeStats`.
 
 ## Target Mechanics
 
-### Types
-- **Basic**: single-hit, baseline reward.
-- **High-value**: single-hit, larger reward.
-- **Armored**: multi-hit with health bar and hit flash.
-- **Reinforced**: tougher armored variant with distinct visuals and larger radius.
+## Target Types
 
-### Health and Damage
-- Collision checks reduce health for multi-hit targets.
+- Basic
+  - one hit, baseline value
+- High-value
+  - one hit, higher value
+- Armored
+  - multiple hits, health bar, hit flash
+- Reinforced
+  - stronger armored variant (more health/value, larger radius, distinct visuals)
+
+## Health and Damage
+
+- If `health > 1`, collision reduces health and triggers hit flash.
 - Target is removed only when health reaches 0.
 
-### Hit Detection
-- Uses grid-local X alignment with the laser wave.
-- Uses `hitThreshold` distance from wave path.
-- Includes vertical early-out bounds to avoid unnecessary sine math.
+## Hit Detection
+
+Per laser/target pair:
+1. Grid-local X bound check
+2. Vertical reach early-out
+3. Sine sample at target-aligned X step
+4. Distance check using `hitThreshold`
 
 ## Economy
 
-### Points
-- Primary currency.
-- Earned by clicking targets and laser kills.
+## Points
 
-### Laser Upgrades
-- Frequency, amplitude, fire rate.
-- Exponential cost scaling.
-- Fire-rate upgrade availability is gated behind auto-fire unlock in panel UI.
+Primary currency used for unlocks and upgrades.
 
-### Target Economy Upgrades
-- **Target Value**: multiplies spawned target rewards.
-- **Spawn Rate**: increases spawn frequency multiplier.
-- **Target Diversity**: unlocks reinforced target spawn tier.
+Earned by:
+- clicking targets
+- laser kills
 
-### Scaling and Caps
-- Spawn timer supports multi-spawn catch-up.
-- `MAX_ACTIVE_TARGETS` prevents runaway entity counts.
+## Laser Upgrade Economy
 
-## Automation
+`UpgradeSystem` upgrades:
+- Frequency
+- Amplitude
+- Fire Rate
 
-### Auto Fire System
-- Purchased once, then enabled.
-- Uses interval scaling based on current active laser fire rate and auto-fire multiplier.
+Cost model:
+- `floor(baseCost * UPGRADE_GROWTH^level)`
 
-### Fire Rate Interaction
-- Fire-rate progression affects both manual and automated firing cadence through shared fire-rate stat progression.
+## Target Economy
 
-## UI/Feedback
-- Floating reward text color varies by target type.
-- Armored/reinforced targets flash when damaged.
-- Beam glow and muzzle flash improve shot readability.
-- Scrollable panel supports larger upgrade stacks.
+`TargetUpgradeSystem` upgrades:
+- Target Value
+  - increases target reward multiplier
+- Spawn Rate
+  - increases spawn frequency multiplier
+- Target Diversity
+  - unlocks reinforced target spawns
+
+## Scaling and Limits
+
+- Spawn uses interval catch-up for smooth pacing.
+- `MAX_ACTIVE_TARGETS` caps concurrent targets for stability.
+
+## Automation and Fire-Rate Coupling
+
+- Fire-rate upgrades are panel-gated until auto-fire unlock.
+- Fire-rate progression affects both:
+  - manual cadence
+  - automated cadence
+
+## Feedback and Clarity
+
+- Floating reward text is colored by target category.
+- Armored/reinforced targets flash on non-lethal hit.
+- Lasers include glow + muzzle flash for shot readability.
+- Scrollable panel keeps large upgrade stacks usable.

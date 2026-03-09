@@ -1,60 +1,33 @@
-# Frequency Laser Clicker – Development Roadmap
+# Roadmap (Updated Snapshot)
 
-## Phase 1 – Core Prototype ✔
+## Completed Foundations
 
-- Canvas engine
-- Targets spawning
-- Laser firing
-- Collision detection
-- Floating rewards
+- Canvas game loop and playfield split
+- Sine-wave laser combat
+- Target spawning and collision
+- Floating reward feedback
+- Laser unlock + tier switching (Simple/Plasma)
+- Laser upgrades (frequency/amplitude/fire rate)
+- Target economy upgrades (value/spawn/diversity)
+- Target variants (basic/high-value/armored/reinforced)
+- Auto-fire automation
+- Panel scrolling and sectioned UI
+- Performance protections (spawn cap + collision early-out)
 
-## Phase 2 – Economy System
+## Near-Term Improvements
 
-Next tasks:
+- UI polish and readability tuning
+- Additional laser tier(s)
+- Advanced target behaviors and visual variety
+- Automation depth beyond auto-fire
 
-1. Points UI refinement
-2. Shop system
-3. First purchase: Simple Laser
-4. Laser unlock logic
+## Mid-Term
 
-## Phase 3 – Upgrade System
+- Extended economy systems
+- More target archetypes
+- richer progression pacing and balancing
 
-Add:
+## Long-Term
 
-- Frequency upgrade
-- Amplitude upgrade
-- Fire rate upgrade
-
-## Phase 4 – Target Variety
-
-Introduce:
-
-- armored targets
-- gold targets
-- fast targets
-
-## Phase 5 – Automation
-
-Add:
-
-- auto fire
-- spawn upgrades
-- passive income
-
-## Phase 6 – Laser Tiers
-
-Unlock new technologies:
-
-Plasma Laser
-Ion Laser
-Quantum Laser
-
-Each tier adds new gameplay mechanics.
-
-## Phase 7 – Polish
-
-- particle effects
-- sound
-- visual upgrades
-- UI redesign
-
+- World/transport-beam style progression
+- prestige-like meta progression layers
