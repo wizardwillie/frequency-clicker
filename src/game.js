@@ -44,6 +44,7 @@ export class Game {
         this.panelWidth = 300
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
+        this.panelScroll = 0
         this.unlockButton = {
             x: 20,
             y: 90,
@@ -70,43 +71,43 @@ export class Game {
         }
         this.frequencyButton = {
             x: 20,
-            y: 200,
+            y: 210,
             width: this.panelWidth - 40,
             height: 72
         }
         this.amplitudeButton = {
             x: 20,
-            y: 286,
+            y: 290,
             width: this.panelWidth - 40,
             height: 72
         }
         this.fireRateButton = {
             x: 20,
-            y: 372,
+            y: 370,
             width: this.panelWidth - 40,
             height: 72
         }
         this.targetValueButton = {
             x: 20,
-            y: 458,
+            y: 480,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetSpawnRateButton = {
             x: 20,
-            y: 526,
+            y: 550,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetDiversityButton = {
             x: 20,
-            y: 594,
+            y: 620,
             width: this.panelWidth - 40,
             height: 60
         }
         this.autoFireButton = {
             x: 20,
-            y: 662,
+            y: 710,
             width: this.panelWidth - 40,
             height: 30
         }
@@ -118,6 +119,9 @@ export class Game {
         this.canvas.addEventListener("click", (event) => {
             this.handleClick(event)
         })
+        this.canvas.addEventListener("wheel", (event) => {
+            this.handleWheel(event)
+        }, { passive: false })
     }
 
     createLaserTypeStats() {
@@ -192,11 +196,49 @@ export class Game {
         }
 
         if (mouseX < this.panelWidth) {
-            this.handlePanelClick(mouseX, mouseY)
+            this.handlePanelClick(mouseX, mouseY + this.panelScroll)
             return
         }
 
         this.handleGridClick(mouseX, mouseY)
+
+    }
+
+    getPanelContentHeight() {
+
+        return this.autoFireButton.y + this.autoFireButton.height + 40
+
+    }
+
+    getMaxPanelScroll() {
+
+        return Math.max(0, this.getPanelContentHeight() - this.canvas.height)
+
+    }
+
+    clampPanelScroll() {
+
+        this.panelScroll = Math.max(0, Math.min(this.panelScroll, this.getMaxPanelScroll()))
+
+    }
+
+    handleWheel(event) {
+
+        const rect = this.canvas.getBoundingClientRect()
+        const mouseX = event.clientX - rect.left
+        const mouseY = event.clientY - rect.top
+
+        if (mouseX < 0 || mouseX > this.canvas.width || mouseY < 0 || mouseY > this.canvas.height) {
+            return
+        }
+
+        if (mouseX >= this.panelWidth) {
+            return
+        }
+
+        event.preventDefault()
+        this.panelScroll += event.deltaY
+        this.clampPanelScroll()
 
     }
 
@@ -489,18 +531,25 @@ export class Game {
 
         const ctx = this.ctx
 
-        ctx.fillStyle = "#e9e9e2"
+        ctx.fillStyle = "#e2e2db"
         ctx.fillRect(0, 0, this.panelWidth, this.canvas.height)
 
         ctx.strokeStyle = "#222"
         ctx.lineWidth = 2
         ctx.strokeRect(0, 0, this.panelWidth, this.canvas.height)
+        this.clampPanelScroll()
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(0, 0, this.panelWidth, this.canvas.height)
+        ctx.clip()
+        ctx.translate(0, -this.panelScroll)
 
         ctx.fillStyle = "#111"
         ctx.font = "20px Arial"
 
         ctx.fillText("Points: " + this.points, 20, 40)
-        this.drawPanelSectionHeader("LASERS", 20, 64)
+        this.drawPanelSectionHeader("LASERS", 20, this.unlockButton.y - 30)
 
         if (!this.hasLaser) {
 
@@ -518,120 +567,121 @@ export class Game {
             ctx.fillText("Unlock Simple Laser", button.x + 12, button.y + 32)
             ctx.font = "16px Arial"
             ctx.fillText("Cost: " + this.simpleLaserCost, button.x + 12, button.y + 58)
-
-            return
-
-        }
-
-        ctx.fillStyle = "#333"
-        ctx.font = "16px Arial"
-        ctx.fillText("Active: " + LASER_TYPES[this.currentLaserType].name, 20, 76)
-
-        if (!this.plasmaUnlocked) {
-
-            this.drawPanelActionButton(
-                this.plasmaUnlockButton,
-                "Unlock Plasma Laser",
-                "Milestone: " + this.plasmaUnlockPoints,
-                this.points >= this.plasmaUnlockPoints
-            )
-
         } else {
 
-            this.drawPanelActionButton(
-                this.simpleLaserButton,
-                "Simple Laser",
-                this.currentLaserType === "simple" ? "Active" : "Switch",
-                true,
-                this.currentLaserType === "simple"
-            )
+            ctx.fillStyle = "#333"
+            ctx.font = "16px Arial"
+            ctx.fillText("Active: " + LASER_TYPES[this.currentLaserType].name, 20, 76)
 
-            this.drawPanelActionButton(
-                this.plasmaLaserButton,
-                "Plasma Laser",
-                this.currentLaserType === "plasma" ? "Active" : "Switch",
-                true,
-                this.currentLaserType === "plasma"
-            )
+            if (!this.plasmaUnlocked) {
 
-        }
+                this.drawPanelActionButton(
+                    this.plasmaUnlockButton,
+                    "Unlock Plasma Laser",
+                    "Milestone: " + this.plasmaUnlockPoints,
+                    this.points >= this.plasmaUnlockPoints
+                )
 
-        const frequencyCost = this.upgradeSystem.getFrequencyCost()
-        const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
-        const fireRateCost = this.upgradeSystem.getFireRateCost()
-        const targetValueCost = this.targetUpgradeSystem.getValueCost()
-        const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
-        const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
-        this.drawPanelSectionHeader("LASER UPGRADES", 20, 176)
+            } else {
 
-        this.drawPanelButton(
-            this.frequencyButton,
-            "Increase Frequency",
-            frequencyCost,
-            this.upgradeSystem.frequencyLevel,
-            this.points >= frequencyCost
-        )
+                this.drawPanelActionButton(
+                    this.simpleLaserButton,
+                    "Simple Laser",
+                    this.currentLaserType === "simple" ? "Active" : "Switch",
+                    true,
+                    this.currentLaserType === "simple"
+                )
 
-        this.drawPanelButton(
-            this.amplitudeButton,
-            "Increase Amplitude",
-            amplitudeCost,
-            this.upgradeSystem.amplitudeLevel,
-            this.points >= amplitudeCost
-        )
+                this.drawPanelActionButton(
+                    this.plasmaLaserButton,
+                    "Plasma Laser",
+                    this.currentLaserType === "plasma" ? "Active" : "Switch",
+                    true,
+                    this.currentLaserType === "plasma"
+                )
 
-        if (this.autoFireUnlocked) {
+            }
+
+            const frequencyCost = this.upgradeSystem.getFrequencyCost()
+            const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
+            const fireRateCost = this.upgradeSystem.getFireRateCost()
+            const targetValueCost = this.targetUpgradeSystem.getValueCost()
+            const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
+            const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
+            this.drawPanelSectionHeader("LASER UPGRADES", 20, this.frequencyButton.y - 10)
+
             this.drawPanelButton(
-                this.fireRateButton,
-                "Increase Fire Rate",
-                fireRateCost,
-                this.upgradeSystem.fireRateLevel,
-                this.points >= fireRateCost
+                this.frequencyButton,
+                "Increase Frequency",
+                frequencyCost,
+                this.upgradeSystem.frequencyLevel,
+                this.points >= frequencyCost
             )
+
+            this.drawPanelButton(
+                this.amplitudeButton,
+                "Increase Amplitude",
+                amplitudeCost,
+                this.upgradeSystem.amplitudeLevel,
+                this.points >= amplitudeCost
+            )
+
+            if (this.autoFireUnlocked) {
+                this.drawPanelButton(
+                    this.fireRateButton,
+                    "Increase Fire Rate",
+                    fireRateCost,
+                    this.upgradeSystem.fireRateLevel,
+                    this.points >= fireRateCost
+                )
+            }
+
+            this.drawPanelSectionHeader("TARGET ECONOMY", 20, this.targetValueButton.y - 24)
+            this.drawPanelButton(
+                this.targetValueButton,
+                "Increase Target Value",
+                targetValueCost,
+                this.targetUpgradeSystem.valueLevel,
+                this.points >= targetValueCost
+            )
+
+            this.drawPanelButton(
+                this.targetSpawnRateButton,
+                "Increase Spawn Rate",
+                targetSpawnRateCost,
+                this.targetUpgradeSystem.spawnRateLevel,
+                this.points >= targetSpawnRateCost
+            )
+
+            this.drawPanelButton(
+                this.targetDiversityButton,
+                "Increase Target Diversity",
+                targetDiversityCost,
+                this.targetUpgradeSystem.diversityLevel,
+                this.points >= targetDiversityCost
+            )
+
+            this.drawPanelSectionHeader("AUTOMATION", 20, this.autoFireButton.y - 10)
+            if (!this.autoFireUnlocked) {
+                this.drawPanelActionButton(
+                    this.autoFireButton,
+                    "Enable Auto Fire",
+                    "Cost: " + this.autoFireCost,
+                    this.points >= this.autoFireCost
+                )
+            } else {
+                this.drawPanelActionButton(
+                    this.autoFireButton,
+                    "Auto Fire: ON",
+                    "",
+                    true,
+                    true
+                )
+            }
+
         }
 
-        this.drawPanelSectionHeader("TARGET ECONOMY", 20, 434)
-        this.drawPanelButton(
-            this.targetValueButton,
-            "Increase Target Value",
-            targetValueCost,
-            this.targetUpgradeSystem.valueLevel,
-            this.points >= targetValueCost
-        )
-
-        this.drawPanelButton(
-            this.targetSpawnRateButton,
-            "Increase Spawn Rate",
-            targetSpawnRateCost,
-            this.targetUpgradeSystem.spawnRateLevel,
-            this.points >= targetSpawnRateCost
-        )
-
-        this.drawPanelButton(
-            this.targetDiversityButton,
-            "Increase Target Diversity",
-            targetDiversityCost,
-            this.targetUpgradeSystem.diversityLevel,
-            this.points >= targetDiversityCost
-        )
-
-        this.drawPanelSectionHeader("AUTOMATION", 20, 646)
-        if (!this.autoFireUnlocked) {
-            this.drawPanelActionButton(
-                this.autoFireButton,
-                "Enable Auto Fire",
-                "Cost: " + this.autoFireCost,
-                this.points >= this.autoFireCost
-            )
-        } else {
-            this.drawPanelActionButton(
-                this.autoFireButton,
-                "Auto Fire: ON",
-                "",
-                true,
-                true
-            )
-        }
+        ctx.restore()
 
     }
 
@@ -639,9 +689,24 @@ export class Game {
 
         const ctx = this.ctx
 
-        ctx.fillStyle = "#333"
+        ctx.fillStyle = "#2f2f2f"
         ctx.font = "bold 16px Arial"
         ctx.fillText(label, x, y)
+        this.drawPanelDivider(y + 6)
+
+    }
+
+    drawPanelDivider(y) {
+
+        const ctx = this.ctx
+
+        ctx.strokeStyle = "#b5b5b0"
+        ctx.lineWidth = 1
+
+        ctx.beginPath()
+        ctx.moveTo(16, y)
+        ctx.lineTo(this.panelWidth - 16, y)
+        ctx.stroke()
 
     }
 
