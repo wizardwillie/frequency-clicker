@@ -555,7 +555,7 @@ export class Game {
 
             const button = this.unlockButton
 
-            ctx.fillStyle = "#d7d7cf"
+            ctx.fillStyle = "#e2e2db"
             ctx.fillRect(button.x, button.y, button.width, button.height)
 
             ctx.strokeStyle = "#222"
