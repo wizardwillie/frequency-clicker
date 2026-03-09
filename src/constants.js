@@ -1,10 +1,16 @@
 export const SIMPLE_LASER_COST = 10
+export const AUTO_FIRE_COST = 250
 
 export const LASER_BASE_FREQUENCY = 0.005
 export const LASER_BASE_AMPLITUDE = 50
 export const LASER_BASE_WIDTH = 3
 export const MAX_LASER_WIDTH = 12
 export const LASER_BASE_FIRE_RATE = 4
+export const PLASMA_UNLOCK_POINTS = 1000
+export const PLASMA_FREQUENCY_MULTIPLIER = 1.4
+export const PLASMA_AMPLITUDE_MULTIPLIER = 1.25
+export const PLASMA_WIDTH_MULTIPLIER = 1.6
+export const PLASMA_FIRE_RATE_MULTIPLIER = 1.1
 
 export const TARGET_BASE_SPAWN_RATE = 1
 export const TARGET_VALUE_BASE = 1

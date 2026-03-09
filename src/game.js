@@ -3,12 +3,11 @@ import { Laser } from "./laser.js"
 import { CollisionSystem } from "./collision.js"
 import { FloatingText } from "./floatingText.js"
 import { UpgradeSystem } from "./upgrades.js"
+import { LASER_TYPES } from "./laserTypes.js"
 import {
     SIMPLE_LASER_COST,
-    LASER_BASE_FREQUENCY,
-    LASER_BASE_AMPLITUDE,
-    LASER_BASE_WIDTH,
-    LASER_BASE_FIRE_RATE
+    PLASMA_UNLOCK_POINTS,
+    AUTO_FIRE_COST
 } from "./constants.js"
 
 export class Game {
@@ -25,11 +24,15 @@ export class Game {
         this.lasers = []
         this.floatingTexts = []
         this.simpleLaserCost = SIMPLE_LASER_COST
-        this.laserFrequency = LASER_BASE_FREQUENCY
-        this.laserAmplitude = LASER_BASE_AMPLITUDE
-        this.laserWidth = LASER_BASE_WIDTH
-        this.laserFireRate = LASER_BASE_FIRE_RATE
-        this.lastShotTime = -Infinity
+        this.autoFireCost = AUTO_FIRE_COST
+        this.autoFireUnlocked = false
+        this.autoFireEnabled = false
+        this.plasmaUnlockPoints = PLASMA_UNLOCK_POINTS
+        this.plasmaUnlocked = false
+        this.currentLaserType = "simple"
+        this.laserTypeStats = this.createLaserTypeStats()
+        this.defineLaserStatAccessors()
+        this.lastAutoShotTime = -Infinity
         this.fireInterval = 1 / this.laserFireRate
         this.panelWidth = 300
         this.gridX = this.panelWidth
@@ -39,6 +42,24 @@ export class Game {
             y: 90,
             width: this.panelWidth - 40,
             height: 80
+        }
+        this.plasmaUnlockButton = {
+            x: 20,
+            y: 90,
+            width: this.panelWidth - 40,
+            height: 80
+        }
+        this.simpleLaserButton = {
+            x: 20,
+            y: 90,
+            width: this.panelWidth - 40,
+            height: 42
+        }
+        this.plasmaLaserButton = {
+            x: 20,
+            y: 140,
+            width: this.panelWidth - 40,
+            height: 42
         }
         this.frequencyButton = {
             x: 20,
@@ -58,6 +79,12 @@ export class Game {
             width: this.panelWidth - 40,
             height: 72
         }
+        this.autoFireButton = {
+            x: 20,
+            y: 458,
+            width: this.panelWidth - 40,
+            height: 72
+        }
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
@@ -65,6 +92,66 @@ export class Game {
         this.canvas.addEventListener("click", (event) => {
             this.handleClick(event)
         })
+    }
+
+    createLaserTypeStats() {
+
+        const stats = {}
+
+        for (const [typeId, laserType] of Object.entries(LASER_TYPES)) {
+            stats[typeId] = {
+                frequency: laserType.baseFrequency,
+                amplitude: laserType.baseAmplitude,
+                width: laserType.baseWidth,
+                fireRate: laserType.baseFireRate
+            }
+        }
+
+        return stats
+
+    }
+
+    defineLaserStatAccessors() {
+
+        Object.defineProperties(this, {
+            laserFrequency: {
+                get: () => this.laserTypeStats[this.currentLaserType].frequency,
+                set: (value) => {
+                    this.laserTypeStats[this.currentLaserType].frequency = value
+                }
+            },
+            laserAmplitude: {
+                get: () => this.laserTypeStats[this.currentLaserType].amplitude,
+                set: (value) => {
+                    this.laserTypeStats[this.currentLaserType].amplitude = value
+                }
+            },
+            laserWidth: {
+                get: () => this.laserTypeStats[this.currentLaserType].width,
+                set: (value) => {
+                    this.laserTypeStats[this.currentLaserType].width = value
+                }
+            },
+            laserFireRate: {
+                get: () => this.laserTypeStats[this.currentLaserType].fireRate,
+                set: (value) => {
+                    this.laserTypeStats[this.currentLaserType].fireRate = value
+                }
+            }
+        })
+
+    }
+
+    switchLaserType(typeId) {
+
+        if (!this.hasLaser) return
+        if (typeId === "plasma" && !this.plasmaUnlocked) return
+        if (!LASER_TYPES[typeId]) return
+
+        this.currentLaserType = typeId
+        this.fireInterval = 1 / this.laserFireRate
+        this.lastAutoShotTime = -Infinity
+
     }
 
     handleClick(event) {
@@ -107,6 +194,36 @@ export class Game {
             return
         }
 
+        if (!this.plasmaUnlocked) {
+
+            if (this.isInsideButton(mouseX, mouseY, this.plasmaUnlockButton)) {
+
+                if (this.points < this.plasmaUnlockPoints) return
+
+                this.plasmaUnlocked = true
+                this.floatingTexts.push(
+                    new FloatingText(
+                        this.gridX + this.gridWidth / 2,
+                        this.canvas.height / 2 - 28,
+                        "Plasma Laser Unlocked"
+                    )
+                )
+
+                return
+            }
+        } else {
+
+            if (this.isInsideButton(mouseX, mouseY, this.simpleLaserButton)) {
+                this.switchLaserType("simple")
+                return
+            }
+
+            if (this.isInsideButton(mouseX, mouseY, this.plasmaLaserButton)) {
+                this.switchLaserType("plasma")
+                return
+            }
+        }
+
         if (this.isInsideButton(mouseX, mouseY, this.frequencyButton)) {
             this.upgradeSystem.buy("frequency")
             return
@@ -122,6 +239,27 @@ export class Game {
             return
         }
 
+        if (this.isInsideButton(mouseX, mouseY, this.autoFireButton)) {
+
+            if (this.autoFireUnlocked) return
+            if (this.points < this.autoFireCost) return
+
+            this.points -= this.autoFireCost
+            this.autoFireUnlocked = true
+            this.autoFireEnabled = true
+            this.lastAutoShotTime = -Infinity
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    this.gridX + this.gridWidth / 2,
+                    this.canvas.height / 2 + 28,
+                    "Auto Fire Online"
+                )
+            )
+
+            return
+        }
+
     }
 
     isInsideButton(mouseX, mouseY, button) {
@@ -132,6 +270,21 @@ export class Game {
             mouseY >= button.y &&
             mouseY <= button.y + button.height
         )
+
+    }
+
+    fireLaser() {
+
+        if (!this.hasLaser) return
+
+        const phase = Math.random() * Math.PI * 2
+        const laserType = LASER_TYPES[this.currentLaserType]
+        const colors = laserType.colors
+        const color = colors[Math.floor(Math.random() * colors.length)]
+
+        const laser = new Laser(this, phase, color)
+        laser.fire()
+        this.lasers.push(laser)
 
     }
 
@@ -162,30 +315,7 @@ export class Game {
 
         // 2. Fire laser if owned
         if (this.hasLaser) {
-
-            const now = performance.now() / 1000
-
-            if (now - this.lastShotTime < this.fireInterval) {
-                return
-            }
-
-            this.lastShotTime = now
-
-            const phase = Math.random() * Math.PI * 2
-
-            const colors = [
-                "#3a5cff",
-                "#7b3aff",
-                "#00aaff",
-                "#6a00ff"
-            ]
-
-            const color = colors[Math.floor(Math.random() * colors.length)]
-
-            const laser = new Laser(this, phase, color)
-
-            laser.fire()
-            this.lasers.push(laser)
+            this.fireLaser()
         }
     }
 
@@ -210,6 +340,8 @@ export class Game {
     update(delta) {
 
         this.spawnSystem.update(delta)
+        this.updateAutoFire()
+
         for (let laser of this.lasers) {
             laser.update(delta)
         }
@@ -225,6 +357,22 @@ export class Game {
             text.update(delta)
         }
         this.floatingTexts = this.floatingTexts.filter(t => t.life > 0)
+
+    }
+
+    updateAutoFire() {
+
+        if (!this.hasLaser) return
+        if (!this.autoFireEnabled) return
+
+        const now = performance.now() / 1000
+
+        if (now - this.lastAutoShotTime < this.fireInterval) {
+            return
+        }
+
+        this.lastAutoShotTime = now
+        this.fireLaser()
 
     }
 
@@ -314,6 +462,39 @@ export class Game {
 
         }
 
+        ctx.fillStyle = "#333"
+        ctx.font = "16px Arial"
+        ctx.fillText("Active: " + LASER_TYPES[this.currentLaserType].name, 20, 76)
+
+        if (!this.plasmaUnlocked) {
+
+            this.drawPanelActionButton(
+                this.plasmaUnlockButton,
+                "Unlock Plasma Laser",
+                "Milestone: " + this.plasmaUnlockPoints,
+                this.points >= this.plasmaUnlockPoints
+            )
+
+        } else {
+
+            this.drawPanelActionButton(
+                this.simpleLaserButton,
+                "Simple Laser",
+                this.currentLaserType === "simple" ? "Active" : "Switch",
+                true,
+                this.currentLaserType === "simple"
+            )
+
+            this.drawPanelActionButton(
+                this.plasmaLaserButton,
+                "Plasma Laser",
+                this.currentLaserType === "plasma" ? "Active" : "Switch",
+                true,
+                this.currentLaserType === "plasma"
+            )
+
+        }
+
         const frequencyCost = this.upgradeSystem.getFrequencyCost()
         const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
         const fireRateCost = this.upgradeSystem.getFireRateCost()
@@ -341,6 +522,64 @@ export class Game {
             this.upgradeSystem.fireRateLevel,
             this.points >= fireRateCost
         )
+
+        if (!this.autoFireUnlocked) {
+            this.drawPanelActionButton(
+                this.autoFireButton,
+                "Enable Auto Fire",
+                "Cost: " + this.autoFireCost,
+                this.points >= this.autoFireCost
+            )
+        } else {
+            this.drawPanelActionButton(
+                this.autoFireButton,
+                "Auto Fire: ON",
+                "",
+                true,
+                true
+            )
+        }
+
+    }
+
+    drawPanelActionButton(button, title, subtitle, enabled, active = false) {
+
+        const ctx = this.ctx
+
+        ctx.fillStyle = active
+            ? "#bfd7ff"
+            : enabled
+                ? "#d7d7cf"
+                : "#c2c2bc"
+        ctx.fillRect(button.x, button.y, button.width, button.height)
+
+        ctx.strokeStyle = active
+            ? "#2f5ea8"
+            : enabled
+                ? "#222"
+                : "#555"
+        ctx.lineWidth = 2
+        ctx.strokeRect(button.x, button.y, button.width, button.height)
+
+        ctx.fillStyle = active
+            ? "#1f3560"
+            : enabled
+                ? "#111"
+                : "#5a5a5a"
+
+        const useTwoLines = Boolean(subtitle) && button.height >= 60
+
+        if (useTwoLines) {
+            ctx.font = "18px Arial"
+            ctx.fillText(title, button.x + 12, button.y + 32)
+            ctx.font = "15px Arial"
+            ctx.fillText(subtitle, button.x + 12, button.y + 58)
+        } else {
+            ctx.font = "17px Arial"
+            const singleLineText = subtitle ? title + " - " + subtitle : title
+            const singleLineY = button.y + (button.height / 2) + 6
+            ctx.fillText(singleLineText, button.x + 12, singleLineY)
+        }
 
     }
 

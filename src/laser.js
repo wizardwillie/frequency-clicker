@@ -88,9 +88,15 @@ export class Laser {
 
             ctx.save()
             ctx.globalAlpha = flashAlpha * 0.9
-            ctx.fillStyle = "#ffffff"
+            ctx.fillStyle = this.color
             ctx.beginPath()
             ctx.arc(gridStartX, centerY, flashRadius, 0, Math.PI * 2)
+            ctx.fill()
+
+            ctx.globalAlpha = flashAlpha
+            ctx.fillStyle = "#ffffff"
+            ctx.beginPath()
+            ctx.arc(gridStartX, centerY, this.width * 0.7, 0, Math.PI * 2)
             ctx.fill()
             ctx.restore()
 
