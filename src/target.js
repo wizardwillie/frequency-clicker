@@ -18,6 +18,8 @@ export class Target {
             reinforced: 22,
             heavy: 26,
             shielded: 15,
+            reflector: 18,
+            splitter: 20,
             fast: 10
         }
         const defaultRadius = defaultRadiusByType[this.type] ?? 14
@@ -71,6 +73,20 @@ export class Target {
             healthBarBackground = "#18273a"
             healthBarFill = "#8bc7ff"
             drawStroke = true
+        } else if (this.type === "reflector") {
+            fillColor = "#ffffff"
+            strokeColor = "#2db8d1"
+            strokeWidth = 3
+            healthBarBackground = "#1b2d33"
+            healthBarFill = "#8cefff"
+            drawStroke = true
+        } else if (this.type === "splitter") {
+            fillColor = "#f4ad2e"
+            strokeColor = "#5a2f00"
+            strokeWidth = 3
+            healthBarBackground = "#36230f"
+            healthBarFill = "#ffd085"
+            drawStroke = true
         } else if (this.type === "fast") {
             fillColor = "#ff8a2a"
             strokeColor = "#9e4a08"
@@ -88,6 +104,10 @@ export class Target {
             fillColor = "#d97171"
         } else if (this.hitFlashTime > 0 && this.type === "shielded") {
             fillColor = this.hasShield ? "#9cd1ff" : "#7bb0ff"
+        } else if (this.hitFlashTime > 0 && this.type === "reflector") {
+            fillColor = "#d7fdff"
+        } else if (this.hitFlashTime > 0 && this.type === "splitter") {
+            fillColor = "#ffd37a"
         } else if (this.hitFlashTime > 0 && this.type === "fast") {
             fillColor = "#ffbd85"
         }
@@ -112,6 +132,24 @@ export class Target {
             ctx.strokeStyle = "#b7e1ff"
             ctx.lineWidth = 3
             ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2)
+            ctx.stroke()
+        }
+
+        if (this.type === "reflector") {
+            ctx.beginPath()
+            ctx.strokeStyle = "#8cefff"
+            ctx.lineWidth = 2
+            ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2)
+            ctx.stroke()
+        }
+
+        if (this.type === "splitter") {
+            ctx.strokeStyle = "#6b3909"
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.moveTo(this.x - this.radius * 0.45, this.y - this.radius * 0.2)
+            ctx.lineTo(this.x - this.radius * 0.05, this.y + this.radius * 0.15)
+            ctx.lineTo(this.x + this.radius * 0.35, this.y - this.radius * 0.25)
             ctx.stroke()
         }
 

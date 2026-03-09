@@ -4,16 +4,22 @@ import {
     TARGET_VALUE_BASE,
     TARGET_HEAVY_CHANCE,
     TARGET_SHIELDED_CHANCE,
+    TARGET_REFLECTOR_CHANCE,
+    TARGET_SPLITTER_CHANCE,
     TARGET_ARMORED_CHANCE,
     TARGET_HIGH_VALUE_CHANCE,
     TARGET_FAST_CHANCE,
     TARGET_HEAVY_VALUE_MULTIPLIER,
     TARGET_SHIELDED_VALUE_MULTIPLIER,
+    TARGET_REFLECTOR_VALUE_MULTIPLIER,
+    TARGET_SPLITTER_VALUE_MULTIPLIER,
     TARGET_ARMORED_VALUE_MULTIPLIER,
     TARGET_HIGH_VALUE_VALUE_MULTIPLIER,
     TARGET_FAST_VALUE_MULTIPLIER,
     TARGET_HEAVY_HEALTH,
     TARGET_SHIELDED_HEALTH,
+    TARGET_REFLECTOR_HEALTH,
+    TARGET_SPLITTER_HEALTH,
     TARGET_FAST_HEALTH,
     TARGET_ARMORED_HEALTH,
     TARGET_REINFORCED_UNLOCK_LEVEL,
@@ -22,6 +28,8 @@ import {
     TARGET_REINFORCED_HEALTH,
     TARGET_REINFORCED_RADIUS,
     TARGET_HEAVY_RADIUS,
+    TARGET_REFLECTOR_RADIUS,
+    TARGET_SPLITTER_RADIUS,
     TARGET_FAST_RADIUS,
     TARGET_HEAVY_SPEED_MULTIPLIER,
     TARGET_FAST_SPEED_MULTIPLIER,
@@ -79,8 +87,10 @@ export class SpawnSystem {
             : 0
         const heavyThreshold = TARGET_HEAVY_CHANCE
         const shieldedThreshold = heavyThreshold + TARGET_SHIELDED_CHANCE
-        const reinforcedThreshold = shieldedThreshold + reinforcedChance
-        const armoredThreshold = reinforcedThreshold + TARGET_ARMORED_CHANCE
+        const reflectorThreshold = shieldedThreshold + TARGET_REFLECTOR_CHANCE
+        const reinforcedThreshold = reflectorThreshold + reinforcedChance
+        const splitterThreshold = reinforcedThreshold + TARGET_SPLITTER_CHANCE
+        const armoredThreshold = splitterThreshold + TARGET_ARMORED_CHANCE
         const highValueThreshold = armoredThreshold + TARGET_HIGH_VALUE_CHANCE
         const fastThreshold = highValueThreshold + TARGET_FAST_CHANCE
         let type = "basic"
@@ -101,11 +111,21 @@ export class SpawnSystem {
             valueMultiplier = TARGET_SHIELDED_VALUE_MULTIPLIER
             maxHealth = TARGET_SHIELDED_HEALTH
             hasShield = true
+        } else if (roll < reflectorThreshold) {
+            type = "reflector"
+            valueMultiplier = TARGET_REFLECTOR_VALUE_MULTIPLIER
+            maxHealth = TARGET_REFLECTOR_HEALTH
+            radius = TARGET_REFLECTOR_RADIUS
         } else if (roll < reinforcedThreshold) {
             type = "reinforced"
             valueMultiplier = TARGET_REINFORCED_VALUE_MULTIPLIER
             maxHealth = TARGET_REINFORCED_HEALTH
             radius = TARGET_REINFORCED_RADIUS
+        } else if (roll < splitterThreshold) {
+            type = "splitter"
+            valueMultiplier = TARGET_SPLITTER_VALUE_MULTIPLIER
+            maxHealth = TARGET_SPLITTER_HEALTH
+            radius = TARGET_SPLITTER_RADIUS
         } else if (roll < armoredThreshold) {
             type = "armored"
             valueMultiplier = TARGET_ARMORED_VALUE_MULTIPLIER
