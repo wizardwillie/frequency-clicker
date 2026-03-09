@@ -19,6 +19,7 @@ export class CollisionSystem {
         for (let laser of lasers) {
 
             if (!laser.active) continue
+            const maxReach = laser.amplitude + this.hitThreshold
 
             for (let i = targets.length - 1; i >= 0; i--) {
 
@@ -26,6 +27,7 @@ export class CollisionSystem {
                 const targetGridX = target.x - this.game.gridX
 
                 if (targetGridX < 0 || targetGridX > laser.x) continue
+                if (target.y < centerY - maxReach || target.y > centerY + maxReach) continue
 
                 const waveX = Math.floor(targetGridX / 5) * 5
 

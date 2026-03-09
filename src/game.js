@@ -3,11 +3,14 @@ import { Laser } from "./laser.js"
 import { CollisionSystem } from "./collision.js"
 import { FloatingText } from "./floatingText.js"
 import { UpgradeSystem } from "./upgrades.js"
+import { TargetUpgradeSystem } from "./targetUpgrades.js"
 import { LASER_TYPES } from "./laserTypes.js"
 import {
     SIMPLE_LASER_COST,
     PLASMA_UNLOCK_POINTS,
-    AUTO_FIRE_COST
+    AUTO_FIRE_COST,
+    AUTO_FIRE_SPEED_MULTIPLIER,
+    BASE_MANUAL_FIRE_COOLDOWN
 } from "./constants.js"
 
 export class Game {
@@ -25,6 +28,8 @@ export class Game {
         this.floatingTexts = []
         this.simpleLaserCost = SIMPLE_LASER_COST
         this.autoFireCost = AUTO_FIRE_COST
+        this.autoFireSpeedMultiplier = AUTO_FIRE_SPEED_MULTIPLIER
+        this.baseManualFireCooldown = BASE_MANUAL_FIRE_COOLDOWN
         this.autoFireUnlocked = false
         this.autoFireEnabled = false
         this.plasmaUnlockPoints = PLASMA_UNLOCK_POINTS
@@ -33,6 +38,7 @@ export class Game {
         this.laserTypeStats = this.createLaserTypeStats()
         this.defineLaserStatAccessors()
         this.lastAutoShotTime = -Infinity
+        this.lastManualShotTime = -Infinity
         this.fireInterval = 1 / this.laserFireRate
         this.panelWidth = 300
         this.gridX = this.panelWidth
@@ -79,16 +85,35 @@ export class Game {
             width: this.panelWidth - 40,
             height: 72
         }
-        this.autoFireButton = {
+        this.targetValueButton = {
             x: 20,
             y: 458,
             width: this.panelWidth - 40,
-            height: 72
+            height: 60
+        }
+        this.targetSpawnRateButton = {
+            x: 20,
+            y: 526,
+            width: this.panelWidth - 40,
+            height: 60
+        }
+        this.targetDiversityButton = {
+            x: 20,
+            y: 594,
+            width: this.panelWidth - 40,
+            height: 60
+        }
+        this.autoFireButton = {
+            x: 20,
+            y: 662,
+            width: this.panelWidth - 40,
+            height: 30
         }
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
         this.upgradeSystem = new UpgradeSystem(this)
+        this.targetUpgradeSystem = new TargetUpgradeSystem(this)
         this.canvas.addEventListener("click", (event) => {
             this.handleClick(event)
         })
@@ -151,6 +176,7 @@ export class Game {
         this.currentLaserType = typeId
         this.fireInterval = 1 / this.laserFireRate
         this.lastAutoShotTime = -Infinity
+        this.lastManualShotTime = -Infinity
 
     }
 
@@ -234,8 +260,23 @@ export class Game {
             return
         }
 
-        if (this.isInsideButton(mouseX, mouseY, this.fireRateButton)) {
+        if (this.autoFireUnlocked && this.isInsideButton(mouseX, mouseY, this.fireRateButton)) {
             this.upgradeSystem.buy("fireRate")
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, this.targetValueButton)) {
+            this.targetUpgradeSystem.buy("value")
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, this.targetSpawnRateButton)) {
+            this.targetUpgradeSystem.buy("spawnRate")
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, this.targetDiversityButton)) {
+            this.targetUpgradeSystem.buy("diversity")
             return
         }
 
@@ -288,6 +329,15 @@ export class Game {
 
     }
 
+    getManualFireInterval() {
+
+        const baseFireRate = LASER_TYPES[this.currentLaserType].baseFireRate
+        const fireRateMultiplier = this.laserFireRate / baseFireRate
+
+        return this.baseManualFireCooldown / fireRateMultiplier
+
+    }
+
     handleGridClick(mouseX, mouseY) {
 
         // 1. Check if clicking a target
@@ -315,6 +365,14 @@ export class Game {
 
         // 2. Fire laser if owned
         if (this.hasLaser) {
+            const now = performance.now() / 1000
+            const manualFireInterval = this.getManualFireInterval()
+
+            if (now - this.lastManualShotTime < manualFireInterval) {
+                return
+            }
+
+            this.lastManualShotTime = now
             this.fireLaser()
         }
     }
@@ -366,8 +424,9 @@ export class Game {
         if (!this.autoFireEnabled) return
 
         const now = performance.now() / 1000
+        const autoFireInterval = this.fireInterval * this.autoFireSpeedMultiplier
 
-        if (now - this.lastAutoShotTime < this.fireInterval) {
+        if (now - this.lastAutoShotTime < autoFireInterval) {
             return
         }
 
@@ -440,6 +499,7 @@ export class Game {
         ctx.font = "20px Arial"
 
         ctx.fillText("Points: " + this.points, 20, 40)
+        this.drawPanelSectionHeader("LASERS", 20, 64)
 
         if (!this.hasLaser) {
 
@@ -498,6 +558,10 @@ export class Game {
         const frequencyCost = this.upgradeSystem.getFrequencyCost()
         const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
         const fireRateCost = this.upgradeSystem.getFireRateCost()
+        const targetValueCost = this.targetUpgradeSystem.getValueCost()
+        const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
+        const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
+        this.drawPanelSectionHeader("LASER UPGRADES", 20, 190)
 
         this.drawPanelButton(
             this.frequencyButton,
@@ -515,14 +579,42 @@ export class Game {
             this.points >= amplitudeCost
         )
 
+        if (this.autoFireUnlocked) {
+            this.drawPanelButton(
+                this.fireRateButton,
+                "Increase Fire Rate",
+                fireRateCost,
+                this.upgradeSystem.fireRateLevel,
+                this.points >= fireRateCost
+            )
+        }
+
+        this.drawPanelSectionHeader("TARGET ECONOMY", 20, 448)
         this.drawPanelButton(
-            this.fireRateButton,
-            "Increase Fire Rate",
-            fireRateCost,
-            this.upgradeSystem.fireRateLevel,
-            this.points >= fireRateCost
+            this.targetValueButton,
+            "Increase Target Value",
+            targetValueCost,
+            this.targetUpgradeSystem.valueLevel,
+            this.points >= targetValueCost
         )
 
+        this.drawPanelButton(
+            this.targetSpawnRateButton,
+            "Increase Spawn Rate",
+            targetSpawnRateCost,
+            this.targetUpgradeSystem.spawnRateLevel,
+            this.points >= targetSpawnRateCost
+        )
+
+        this.drawPanelButton(
+            this.targetDiversityButton,
+            "Increase Target Diversity",
+            targetDiversityCost,
+            this.targetUpgradeSystem.diversityLevel,
+            this.points >= targetDiversityCost
+        )
+
+        this.drawPanelSectionHeader("AUTOMATION", 20, 654)
         if (!this.autoFireUnlocked) {
             this.drawPanelActionButton(
                 this.autoFireButton,
@@ -539,6 +631,16 @@ export class Game {
                 true
             )
         }
+
+    }
+
+    drawPanelSectionHeader(label, x, y) {
+
+        const ctx = this.ctx
+
+        ctx.fillStyle = "#333"
+        ctx.font = "bold 16px Arial"
+        ctx.fillText(label, x, y)
 
     }
 

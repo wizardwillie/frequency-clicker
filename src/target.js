@@ -31,15 +31,27 @@ export class Target {
     draw(ctx) {
 
         let fillColor = "#00ffff"
+        let strokeColor = "#1d6a34"
+        let strokeWidth = 3
+        let healthBarBackground = "#273127"
+        let healthBarFill = "#8fff8f"
 
         if (this.type === "armored") {
             fillColor = "#56d17e"
+        } else if (this.type === "reinforced") {
+            fillColor = "#d14cff"
+            strokeColor = "#6a1b9a"
+            strokeWidth = 4
+            healthBarBackground = "#2d163b"
+            healthBarFill = "#f08bff"
         } else if (this.type === "highValue") {
             fillColor = "#ffd24a"
         }
 
         if (this.hitFlashTime > 0 && this.type === "armored") {
             fillColor = "#b9ffce"
+        } else if (this.hitFlashTime > 0 && this.type === "reinforced") {
+            fillColor = "#f0a3ff"
         }
 
         ctx.beginPath()
@@ -50,10 +62,10 @@ export class Target {
 
         ctx.fill()
 
-        if (this.type === "armored") {
+        if (this.type === "armored" || this.type === "reinforced") {
 
-            ctx.strokeStyle = "#1d6a34"
-            ctx.lineWidth = 3
+            ctx.strokeStyle = strokeColor
+            ctx.lineWidth = strokeWidth
             ctx.stroke()
 
             const barWidth = this.radius * 2
@@ -62,10 +74,10 @@ export class Target {
             const barY = this.y - this.radius - 10
             const healthRatio = this.health / this.maxHealth
 
-            ctx.fillStyle = "#273127"
+            ctx.fillStyle = healthBarBackground
             ctx.fillRect(barX, barY, barWidth, barHeight)
 
-            ctx.fillStyle = "#8fff8f"
+            ctx.fillStyle = healthBarFill
             ctx.fillRect(barX, barY, barWidth * healthRatio, barHeight)
 
         }
