@@ -37,10 +37,11 @@ export class SpawnSystem {
 
         while (this.spawnTimer >= spawnInterval) {
 
-            if (this.game.targets.length < MAX_ACTIVE_TARGETS) {
-                this.spawnTarget()
+            if (this.game.targets.length >= MAX_ACTIVE_TARGETS) {
+                break
             }
 
+            this.spawnTarget()
             this.spawnTimer -= spawnInterval
         }
 

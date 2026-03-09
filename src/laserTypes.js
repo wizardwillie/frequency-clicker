@@ -17,7 +17,9 @@ export const LASER_TYPES = {
         baseAmplitude: LASER_BASE_AMPLITUDE,
         baseWidth: LASER_BASE_WIDTH,
         baseFireRate: LASER_BASE_FIRE_RATE,
-        colors: ["#3a5cff", "#7b3aff", "#00aaff", "#6a00ff"]
+        colors: ["#3a5cff", "#7b3aff", "#00aaff", "#6a00ff"],
+        glowMultiplier: 1.0,
+        flashMultiplier: 1.0
     },
     plasma: {
         id: "plasma",
@@ -26,6 +28,8 @@ export const LASER_TYPES = {
         baseAmplitude: LASER_BASE_AMPLITUDE * PLASMA_AMPLITUDE_MULTIPLIER,
         baseWidth: LASER_BASE_WIDTH * PLASMA_WIDTH_MULTIPLIER,
         baseFireRate: LASER_BASE_FIRE_RATE * PLASMA_FIRE_RATE_MULTIPLIER,
-        colors: ["#ff7a00", "#ffb347", "#ff4d4d", "#ffcc33"]
+        colors: ["#ff7a00", "#ffb347", "#ff4d4d", "#ffcc33"],
+        glowMultiplier: 1.8,
+        flashMultiplier: 1.4
     }
 }

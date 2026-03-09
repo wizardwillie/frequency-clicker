@@ -1,3 +1,5 @@
+import { LASER_TYPES } from "./laserTypes.js"
+
 export class Laser {
 
     constructor(game, phase, color) {
@@ -10,6 +12,9 @@ export class Laser {
         this.frequency = this.game.laserFrequency
         this.amplitude = this.game.laserAmplitude
         this.width = this.game.laserWidth
+        const laserType = LASER_TYPES[this.game.currentLaserType]
+        this.glowMultiplier = laserType?.glowMultiplier ?? 1
+        this.flashMultiplier = laserType?.flashMultiplier ?? 1
 
         this.phase = phase
         this.color = color
@@ -70,7 +75,7 @@ export class Laser {
         ctx.save()
         ctx.globalAlpha = 0.15
         ctx.strokeStyle = this.color
-        ctx.lineWidth = this.width * 2.5
+        ctx.lineWidth = this.width * 2.5 * this.glowMultiplier
         ctx.lineCap = "round"
         ctx.stroke()
         ctx.restore()
@@ -84,7 +89,7 @@ export class Laser {
         if (this.flashTime > 0) {
 
             const flashAlpha = this.flashTime / this.flashDuration
-            const flashRadius = this.width * 1.8
+            const flashRadius = this.width * 1.8 * this.flashMultiplier
 
             ctx.save()
             ctx.globalAlpha = flashAlpha * 0.9

@@ -10,7 +10,8 @@ import {
     PLASMA_UNLOCK_POINTS,
     AUTO_FIRE_COST,
     AUTO_FIRE_SPEED_MULTIPLIER,
-    BASE_MANUAL_FIRE_COOLDOWN
+    BASE_MANUAL_FIRE_COOLDOWN,
+    DEV_STARTING_POINTS
 } from "./constants.js"
 
 export class Game {
@@ -21,7 +22,7 @@ export class Game {
         this.ctx = canvas.getContext("2d")
 
         this.lastTime = 0
-        this.points = 0
+        this.points = DEV_STARTING_POINTS
         this.hasLaser = false
         this.targets = []
         this.lasers = []
@@ -561,7 +562,7 @@ export class Game {
         const targetValueCost = this.targetUpgradeSystem.getValueCost()
         const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
         const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
-        this.drawPanelSectionHeader("LASER UPGRADES", 20, 190)
+        this.drawPanelSectionHeader("LASER UPGRADES", 20, 176)
 
         this.drawPanelButton(
             this.frequencyButton,
@@ -589,7 +590,7 @@ export class Game {
             )
         }
 
-        this.drawPanelSectionHeader("TARGET ECONOMY", 20, 448)
+        this.drawPanelSectionHeader("TARGET ECONOMY", 20, 434)
         this.drawPanelButton(
             this.targetValueButton,
             "Increase Target Value",
@@ -614,7 +615,7 @@ export class Game {
             this.points >= targetDiversityCost
         )
 
-        this.drawPanelSectionHeader("AUTOMATION", 20, 654)
+        this.drawPanelSectionHeader("AUTOMATION", 20, 646)
         if (!this.autoFireUnlocked) {
             this.drawPanelActionButton(
                 this.autoFireButton,

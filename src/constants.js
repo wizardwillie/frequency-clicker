@@ -2,6 +2,7 @@ export const SIMPLE_LASER_COST = 10
 export const AUTO_FIRE_COST = 250
 export const AUTO_FIRE_SPEED_MULTIPLIER = 1.6
 export const BASE_MANUAL_FIRE_COOLDOWN = 0.15
+export const DEV_STARTING_POINTS = 1000000
 
 export const LASER_BASE_FREQUENCY = 0.005
 export const LASER_BASE_AMPLITUDE = 50
