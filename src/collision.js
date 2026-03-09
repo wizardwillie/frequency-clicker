@@ -262,7 +262,8 @@ export class CollisionSystem {
                         continue
                     }
 
-                    const damage = Math.max(1, laser.strength || 1)
+                    const overchargeBonus = 1 + (this.game.laserOvercharge * 0.015)
+                    const damage = Math.max(1, (laser.strength || 1) * overchargeBonus)
                     target.hitFlashTime = target.hitFlashDuration
                     target.health -= damage
 
@@ -280,6 +281,11 @@ export class CollisionSystem {
                     }
 
                     this.game.points += target.value
+                    const overchargeGain = target.type === "boss" ? 10 : 2
+                    this.game.laserOvercharge = Math.min(
+                        this.game.maxLaserOvercharge,
+                        this.game.laserOvercharge + overchargeGain
+                    )
                     const rewardColor =
                         target.type === "armored"
                             ? "#8fff8f"

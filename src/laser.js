@@ -62,12 +62,15 @@ export class Laser {
         const centerY = this.game.canvas.height / 2
         const gridStartX = this.game.gridX
         const maxX = Math.min(this.x, this.game.gridWidth)
+        const overchargeMultiplier = 1 + (this.game.laserOvercharge * 0.02)
+        const scaledAmplitude = this.amplitude * overchargeMultiplier
+        const scaledWidth = this.width * overchargeMultiplier
 
         ctx.moveTo(gridStartX, centerY)
 
         for (let i = 0; i < maxX; i += 5) {
 
-            const y = centerY + Math.sin((i * this.frequency) + this.phase) * this.amplitude
+            const y = centerY + Math.sin((i * this.frequency) + this.phase) * scaledAmplitude
 
             ctx.lineTo(gridStartX + i, y)
 
@@ -76,13 +79,13 @@ export class Laser {
         ctx.save()
         ctx.globalAlpha = 0.15
         ctx.strokeStyle = this.color
-        ctx.lineWidth = this.width * 2.5 * this.glowMultiplier
+        ctx.lineWidth = this.width * 2.5 * this.glowMultiplier * overchargeMultiplier
         ctx.lineCap = "round"
         ctx.stroke()
         ctx.restore()
 
         ctx.strokeStyle = this.color
-        ctx.lineWidth = this.width
+        ctx.lineWidth = scaledWidth
         ctx.lineCap = "round"
 
         ctx.stroke()
@@ -90,7 +93,7 @@ export class Laser {
         if (this.flashTime > 0) {
 
             const flashAlpha = this.flashTime / this.flashDuration
-            const flashRadius = this.width * 1.8 * this.flashMultiplier
+            const flashRadius = this.width * 1.8 * this.flashMultiplier * overchargeMultiplier
 
             ctx.save()
             ctx.globalAlpha = flashAlpha * 0.9
@@ -102,7 +105,7 @@ export class Laser {
             ctx.globalAlpha = flashAlpha
             ctx.fillStyle = "#ffffff"
             ctx.beginPath()
-            ctx.arc(gridStartX, centerY, this.width * 0.7, 0, Math.PI * 2)
+            ctx.arc(gridStartX, centerY, this.width * 0.7 * overchargeMultiplier, 0, Math.PI * 2)
             ctx.fill()
             ctx.restore()
 

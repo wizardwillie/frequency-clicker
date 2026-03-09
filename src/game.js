@@ -43,6 +43,9 @@ export class Game {
         this.lastAutoShotTime = -Infinity
         this.lastManualShotTime = -Infinity
         this.fireInterval = 1 / this.laserFireRate
+        this.laserOvercharge = 0
+        this.maxLaserOvercharge = 50
+        this.overchargeDecayRate = 6
         this.panelWidth = 300
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
@@ -460,6 +463,11 @@ export class Game {
 
     update(delta) {
 
+        this.laserOvercharge = Math.max(
+            0,
+            this.laserOvercharge - this.overchargeDecayRate * delta
+        )
+
         this.spawnSystem.update(delta)
         this.updateAutoFire()
 
@@ -569,6 +577,16 @@ export class Game {
         ctx.font = "20px Arial"
 
         ctx.fillText("Points: " + this.points, 20, 40)
+        const overchargeRatio = this.maxLaserOvercharge > 0
+            ? this.laserOvercharge / this.maxLaserOvercharge
+            : 0
+        const overchargePercent = Math.floor(overchargeRatio * 100)
+        const overchargeRed = 255
+        const overchargeGreen = Math.max(40, Math.floor(190 - (overchargeRatio * 150)))
+        const overchargeBlue = Math.max(20, Math.floor(90 - (overchargeRatio * 70)))
+        ctx.fillStyle = `rgb(${overchargeRed}, ${overchargeGreen}, ${overchargeBlue})`
+        ctx.font = "16px Arial"
+        ctx.fillText("Overcharge: " + overchargePercent + "%", 20, 64)
         this.drawPanelSectionHeader("LASERS", 20, this.unlockButton.y - 44)
 
         if (!this.hasLaser) {
