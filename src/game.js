@@ -2,9 +2,12 @@ import { SpawnSystem } from "./spawn.js"
 import { Laser } from "./laser.js"
 import { CollisionSystem } from "./collision.js"
 import { FloatingText } from "./floatingText.js"
+import { ParticleSystem } from "./particles.js"
 import { UpgradeSystem } from "./upgrades.js"
 import { TargetUpgradeSystem } from "./targetUpgrades.js"
+import { ClickUpgradeSystem } from "./clickUpgrades.js"
 import { LASER_TYPES } from "./laserTypes.js"
+import { SaveSystem } from "./saveSystem.js"
 import {
     SIMPLE_LASER_COST,
     PLASMA_UNLOCK_POINTS,
@@ -13,7 +16,9 @@ import {
     BASE_MANUAL_FIRE_COOLDOWN,
     DEV_STARTING_POINTS,
     LASER_BASE_STRENGTH,
-    MAX_LASER_STRENGTH
+    MAX_LASER_STRENGTH,
+    GAME_STATE_TITLE,
+    GAME_STATE_PLAYING
 } from "./constants.js"
 
 export class Game {
@@ -22,9 +27,12 @@ export class Game {
 
         this.canvas = canvas
         this.ctx = canvas.getContext("2d")
+        this.gameState = GAME_STATE_TITLE
 
         this.lastTime = 0
         this.points = DEV_STARTING_POINTS
+        this.clickDamage = 1
+        this.clickUpgradeLevel = 0
         this.hasLaser = false
         this.targets = []
         this.lasers = []
@@ -46,6 +54,8 @@ export class Game {
         this.laserOvercharge = 0
         this.maxLaserOvercharge = 50
         this.overchargeDecayRate = 6
+        this.autoSaveInterval = 15
+        this.autoSaveTimer = 0
         this.panelWidth = 300
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
@@ -116,17 +126,27 @@ export class Game {
             width: this.panelWidth - 40,
             height: 60
         }
+        this.clickDamageButton = {
+            x: 20,
+            y: 770,
+            width: this.panelWidth - 40,
+            height: 60
+        }
         this.autoFireButton = {
             x: 20,
-            y: 790,
+            y: 890,
             width: this.panelWidth - 40,
             height: 30
         }
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
+        this.particleSystem = new ParticleSystem(this)
         this.upgradeSystem = new UpgradeSystem(this)
         this.targetUpgradeSystem = new TargetUpgradeSystem(this)
+        this.clickUpgradeSystem = new ClickUpgradeSystem(this)
+        this.saveSystem = new SaveSystem(this)
+        this.saveSystem.load()
         this.canvas.addEventListener("click", (event) => {
             this.handleClick(event)
         })
@@ -213,6 +233,11 @@ export class Game {
             return
         }
 
+        if (this.gameState === GAME_STATE_TITLE) {
+            this.handleTitleClick(mouseX, mouseY)
+            return
+        }
+
         if (mouseX < this.panelWidth) {
             this.handlePanelClick(mouseX, mouseY + this.panelScroll)
             return
@@ -242,6 +267,10 @@ export class Game {
 
     handleWheel(event) {
 
+        if (this.gameState !== GAME_STATE_PLAYING) {
+            return
+        }
+
         const rect = this.canvas.getBoundingClientRect()
         const mouseX = event.clientX - rect.left
         const mouseY = event.clientY - rect.top
@@ -257,6 +286,59 @@ export class Game {
         event.preventDefault()
         this.panelScroll += event.deltaY
         this.clampPanelScroll()
+
+    }
+
+    getTitleButtons() {
+
+        const buttonWidth = 280
+        const buttonHeight = 56
+        const buttonGap = 18
+        const x = (this.canvas.width / 2) - (buttonWidth / 2)
+        const startY = (this.canvas.height / 2) - 24
+
+        return {
+            continueButton: {
+                x,
+                y: startY,
+                width: buttonWidth,
+                height: buttonHeight
+            },
+            newGameButton: {
+                x,
+                y: startY + buttonHeight + buttonGap,
+                width: buttonWidth,
+                height: buttonHeight
+            },
+            resetButton: {
+                x,
+                y: startY + (buttonHeight + buttonGap) * 2,
+                width: buttonWidth,
+                height: buttonHeight
+            }
+        }
+
+    }
+
+    handleTitleClick(mouseX, mouseY) {
+
+        const buttons = this.getTitleButtons()
+
+        if (this.isInsideButton(mouseX, mouseY, buttons.continueButton)) {
+            this.gameState = GAME_STATE_PLAYING
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, buttons.newGameButton)) {
+            this.saveSystem.reset()
+            this.gameState = GAME_STATE_PLAYING
+            return
+        }
+
+        if (this.isInsideButton(mouseX, mouseY, buttons.resetButton)) {
+            this.saveSystem.reset()
+            location.reload()
+        }
 
     }
 
@@ -346,6 +428,11 @@ export class Game {
             return
         }
 
+        if (this.isInsideButton(mouseX, mouseY, this.clickDamageButton)) {
+            this.clickUpgradeSystem.buyClickUpgrade()
+            return
+        }
+
         if (this.isInsideButton(mouseX, mouseY, this.autoFireButton)) {
 
             if (this.autoFireUnlocked) return
@@ -418,12 +505,33 @@ export class Game {
 
             if (distance < target.radius) {
 
+                this.particleSystem.spawnExplosion(target.x, target.y, 4, "#ff7a4d")
+
                 this.floatingTexts.push(
-                    new FloatingText(target.x, target.y, "+" + target.value)
+                    new FloatingText(
+                        target.x + (Math.random() - 0.5) * 10,
+                        target.y + (Math.random() - 0.5) * 10,
+                        "-" + this.clickDamage,
+                        "#ff9a66"
+                    )
                 )
 
-                this.points += target.value
-                this.targets.splice(i, 1)
+                target.hitFlashTime = target.hitFlashDuration
+                target.health -= this.clickDamage
+
+                if (target.health <= 0) {
+                    this.particleSystem.spawnExplosion(target.x, target.y, 12, "#ffb84d")
+                    this.points += target.value
+                    this.floatingTexts.push(
+                        new FloatingText(
+                            target.x + (Math.random() - 0.5) * 10,
+                            target.y + (Math.random() - 0.5) * 10,
+                            "+" + target.value,
+                            "#ffffff"
+                        )
+                    )
+                    this.targets.splice(i, 1)
+                }
 
                 return
             }
@@ -463,6 +571,10 @@ export class Game {
 
     update(delta) {
 
+        if (this.gameState !== GAME_STATE_PLAYING) {
+            return
+        }
+
         this.laserOvercharge = Math.max(
             0,
             this.laserOvercharge - this.overchargeDecayRate * delta
@@ -481,11 +593,19 @@ export class Game {
             target.update(delta) 
         }
         this.collisionSystem.check()
+        this.particleSystem.update(delta)
 
         for (let text of this.floatingTexts) {
             text.update(delta)
         }
         this.floatingTexts = this.floatingTexts.filter(t => t.life > 0)
+
+        this.autoSaveTimer += delta
+
+        while (this.autoSaveTimer >= this.autoSaveInterval) {
+            this.autoSaveTimer -= this.autoSaveInterval
+            this.saveSystem.save()
+        }
 
     }
 
@@ -508,6 +628,11 @@ export class Game {
 
     render() {
 
+        if (this.gameState === GAME_STATE_TITLE) {
+            this.drawTitleScreen(this.ctx)
+            return
+        }
+
         this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height)
         this.drawPanel()
         this.drawGrid(100)
@@ -520,9 +645,57 @@ export class Game {
             laser.draw(this.ctx)
         }   
 
+        this.particleSystem.draw(this.ctx)
+
         for (let text of this.floatingTexts) {
             text.draw(this.ctx)
         }
+    }
+
+    drawTitleButton(button, label, isDanger = false) {
+
+        const ctx = this.ctx
+
+        ctx.fillStyle = isDanger ? "#f0cdcd" : "#d7d7cf"
+        ctx.fillRect(button.x, button.y, button.width, button.height)
+
+        ctx.strokeStyle = isDanger ? "#8a2a2a" : "#222"
+        ctx.lineWidth = 2
+        ctx.strokeRect(button.x, button.y, button.width, button.height)
+
+        ctx.fillStyle = isDanger ? "#6b1f1f" : "#111"
+        ctx.font = "22px Arial"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText(label, button.x + (button.width / 2), button.y + (button.height / 2))
+        ctx.textAlign = "left"
+        ctx.textBaseline = "alphabetic"
+
+    }
+
+    drawTitleScreen(ctx) {
+
+        const buttons = this.getTitleButtons()
+        const centerX = this.canvas.width / 2
+
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+        ctx.fillStyle = "#101214"
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+        ctx.fillStyle = "#f4f4ee"
+        ctx.font = "bold 58px Arial"
+        ctx.textAlign = "center"
+        ctx.fillText("Frequency Laser Clicker", centerX, 180)
+
+        ctx.fillStyle = "#c8c8c0"
+        ctx.font = "20px Arial"
+        ctx.fillText("Choose an option to begin", centerX, 228)
+        ctx.textAlign = "left"
+
+        this.drawTitleButton(buttons.continueButton, "Continue")
+        this.drawTitleButton(buttons.newGameButton, "New Game")
+        this.drawTitleButton(buttons.resetButton, "Reset Progress", true)
+
     }
 
     drawGrid(offsetY) {
@@ -648,6 +821,7 @@ export class Game {
             const targetValueCost = this.targetUpgradeSystem.getValueCost()
             const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
             const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
+            const clickDamageCost = this.clickUpgradeSystem.getClickCost()
             this.drawPanelSectionHeader("LASER UPGRADES", 20, this.frequencyButton.y - 44)
 
             this.drawPanelButton(
@@ -707,6 +881,14 @@ export class Game {
                 targetDiversityCost,
                 this.targetUpgradeSystem.diversityLevel,
                 this.points >= targetDiversityCost
+            )
+
+            this.drawPanelButton(
+                this.clickDamageButton,
+                "Increase Click DMG (" + this.clickDamage + ")",
+                clickDamageCost,
+                this.clickUpgradeLevel,
+                this.points >= clickDamageCost
             )
 
             this.drawPanelSectionHeader("AUTOMATION", 20, this.autoFireButton.y - 44)
