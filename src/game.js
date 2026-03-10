@@ -59,6 +59,7 @@ export class Game {
         this.panelWidth = 300
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
+        this.gridOffset = 0
         this.panelScroll = 0
         this.unlockButton = {
             x: 20,
@@ -575,6 +576,11 @@ export class Game {
             return
         }
 
+        this.gridOffset += delta * 10
+        if (this.gridOffset > 40) {
+            this.gridOffset = 0
+        }
+
         this.laserOvercharge = Math.max(
             0,
             this.laserOvercharge - this.overchargeDecayRate * delta
@@ -633,9 +639,14 @@ export class Game {
             return
         }
 
-        this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height)
+        const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height)
+        gradient.addColorStop(0, "#040712")
+        gradient.addColorStop(1, "#0b1020")
+        this.ctx.fillStyle = gradient
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
         this.drawPanel()
-        this.drawGrid(100)
+        this.drawGrid()
 
         for (let target of this.targets) {
             target.draw(this.ctx)
@@ -698,34 +709,41 @@ export class Game {
 
     }
 
-    drawGrid(offsetY) {
+    drawGrid() {
 
         const ctx = this.ctx
-        const gridSize = 40
+        const spacing = 40
+        const startX = this.gridX - this.gridOffset
 
-        ctx.strokeStyle = "#e6e6e6"
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
+        ctx.clip()
+
+        ctx.strokeStyle = "#2a5fff"
+
+        // Glow pass
+        ctx.globalAlpha = 0.05
+        ctx.lineWidth = 6
+        for (let x = startX; x <= this.canvas.width + spacing; x += spacing) {
+            ctx.beginPath()
+            ctx.moveTo(x, 0)
+            ctx.lineTo(x, this.canvas.height)
+            ctx.stroke()
+        }
+
+        // Line pass
+        ctx.globalAlpha = 0.2
         ctx.lineWidth = 1
-
-        for (let x = 0; x < this.canvas.width; x += gridSize) {
-
+        for (let x = startX; x <= this.canvas.width + spacing; x += spacing) {
             ctx.beginPath()
-            ctx.moveTo(x + this.gridX, 0)
-            ctx.lineTo(x + this.gridX, this.canvas.height)
+            ctx.moveTo(x, 0)
+            ctx.lineTo(x, this.canvas.height)
             ctx.stroke()
-
         }
 
-        for (let y = 0; y < this.canvas.height; y += gridSize) {
+        ctx.restore()
 
-            ctx.beginPath()
-            ctx.moveTo(this.gridX, y)
-            ctx.lineTo(this.canvas.width, y)
-            ctx.stroke()
-
-        }
-
-    
-    
     }
 
     drawPanel() {
