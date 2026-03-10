@@ -19,10 +19,6 @@ export class UpgradeSystem {
     constructor(game) {
 
         this.game = game
-        this.frequencyLevel = 0
-        this.amplitudeLevel = 0
-        this.fireRateLevel = 0
-        this.strengthLevel = 0
 
     }
 
@@ -34,25 +30,33 @@ export class UpgradeSystem {
 
     getFrequencyCost() {
 
-        return this.getScaledCost(FREQUENCY_UPGRADE_BASE, this.frequencyLevel)
+        const stats = this.getActiveLaserStats()
+
+        return this.getScaledCost(FREQUENCY_UPGRADE_BASE, stats.frequencyLevel ?? 0)
 
     }
 
     getAmplitudeCost() {
 
-        return this.getScaledCost(AMPLITUDE_UPGRADE_BASE, this.amplitudeLevel)
+        const stats = this.getActiveLaserStats()
+
+        return this.getScaledCost(AMPLITUDE_UPGRADE_BASE, stats.amplitudeLevel ?? 0)
 
     }
 
     getFireRateCost() {
 
-        return this.getScaledCost(FIRERATE_UPGRADE_BASE, this.fireRateLevel)
+        const stats = this.getActiveLaserStats()
+
+        return this.getScaledCost(FIRERATE_UPGRADE_BASE, stats.fireRateLevel ?? 0)
 
     }
 
     getStrengthCost() {
 
-        return this.getScaledCost(LASER_STRENGTH_UPGRADE_BASE, this.strengthLevel)
+        const stats = this.getActiveLaserStats()
+
+        return this.getScaledCost(LASER_STRENGTH_UPGRADE_BASE, stats.strengthLevel ?? 0)
 
     }
 
@@ -80,7 +84,14 @@ export class UpgradeSystem {
 
     getActiveLaserStats() {
 
-        return this.game.laserTypeStats[this.game.currentLaserType]
+        const stats = this.game.laserTypeStats[this.game.currentLaserType]
+
+        if (!Number.isFinite(stats.frequencyLevel)) stats.frequencyLevel = 0
+        if (!Number.isFinite(stats.amplitudeLevel)) stats.amplitudeLevel = 0
+        if (!Number.isFinite(stats.fireRateLevel)) stats.fireRateLevel = 0
+        if (!Number.isFinite(stats.strengthLevel)) stats.strengthLevel = 0
+
+        return stats
 
     }
 
@@ -93,7 +104,7 @@ export class UpgradeSystem {
         const stats = this.getActiveLaserStats()
 
         this.game.points -= cost
-        this.frequencyLevel += 1
+        stats.frequencyLevel += 1
 
         stats.frequency += FREQUENCY_UPGRADE_STEP
         stats.amplitude += FREQUENCY_UPGRADE_AMPLITUDE_BONUS
@@ -113,7 +124,7 @@ export class UpgradeSystem {
         const stats = this.getActiveLaserStats()
 
         this.game.points -= cost
-        this.amplitudeLevel += 1
+        stats.amplitudeLevel += 1
         stats.amplitude += AMPLITUDE_UPGRADE_STEP
 
         return true
@@ -129,7 +140,7 @@ export class UpgradeSystem {
         const stats = this.getActiveLaserStats()
 
         this.game.points -= cost
-        this.fireRateLevel += 1
+        stats.fireRateLevel += 1
         stats.fireRate += FIRERATE_UPGRADE_STEP
         this.game.fireInterval = 1 / stats.fireRate
 
@@ -148,7 +159,7 @@ export class UpgradeSystem {
         if (this.game.points < cost) return false
 
         this.game.points -= cost
-        this.strengthLevel += 1
+        stats.strengthLevel += 1
         stats.strength += LASER_STRENGTH_UPGRADE_STEP
         stats.strength = Math.min(stats.strength, MAX_LASER_STRENGTH)
 

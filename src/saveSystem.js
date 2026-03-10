@@ -18,6 +18,8 @@ export class SaveSystem {
 
     save() {
 
+        const activeStats = this.game.laserTypeStats[this.game.currentLaserType]
+
         const saveData = {
             version: SAVE_VERSION,
             points: this.game.points,
@@ -33,10 +35,10 @@ export class SaveSystem {
                 upgradeLevel: this.game.clickUpgradeLevel
             },
             upgrades: {
-                frequencyLevel: this.game.upgradeSystem.frequencyLevel,
-                amplitudeLevel: this.game.upgradeSystem.amplitudeLevel,
-                fireRateLevel: this.game.upgradeSystem.fireRateLevel,
-                strengthLevel: this.game.upgradeSystem.strengthLevel
+                frequencyLevel: activeStats.frequencyLevel ?? 0,
+                amplitudeLevel: activeStats.amplitudeLevel ?? 0,
+                fireRateLevel: activeStats.fireRateLevel ?? 0,
+                strengthLevel: activeStats.strengthLevel ?? 0
             },
             targetUpgrades: {
                 valueLevel: this.game.targetUpgradeSystem.valueLevel,
@@ -76,11 +78,6 @@ export class SaveSystem {
                 1 + (this.game.clickUpgradeLevel * CLICK_UPGRADE_STEP)
             )
 
-            this.game.upgradeSystem.frequencyLevel = this.readNumber(saveData.upgrades?.frequencyLevel, 0)
-            this.game.upgradeSystem.amplitudeLevel = this.readNumber(saveData.upgrades?.amplitudeLevel, 0)
-            this.game.upgradeSystem.fireRateLevel = this.readNumber(saveData.upgrades?.fireRateLevel, 0)
-            this.game.upgradeSystem.strengthLevel = this.readNumber(saveData.upgrades?.strengthLevel, 0)
-
             this.game.targetUpgradeSystem.valueLevel = this.readNumber(saveData.targetUpgrades?.valueLevel, 0)
             this.game.targetUpgradeSystem.spawnRateLevel = this.readNumber(saveData.targetUpgrades?.spawnRateLevel, 0)
             this.game.targetUpgradeSystem.diversityLevel = this.readNumber(saveData.targetUpgrades?.diversityLevel, 0)
@@ -94,7 +91,14 @@ export class SaveSystem {
                 this.game.currentLaserType = saveData.currentLaserType
             }
 
-            this.applyLaserTypeStats(saveData.laserTypeStats)
+            const legacyUpgradeLevels = {
+                frequencyLevel: this.readNumber(saveData.upgrades?.frequencyLevel, 0),
+                amplitudeLevel: this.readNumber(saveData.upgrades?.amplitudeLevel, 0),
+                fireRateLevel: this.readNumber(saveData.upgrades?.fireRateLevel, 0),
+                strengthLevel: this.readNumber(saveData.upgrades?.strengthLevel, 0)
+            }
+
+            this.applyLaserTypeStats(saveData.laserTypeStats, legacyUpgradeLevels)
             this.game.fireInterval = 1 / this.game.laserFireRate
             this.game.lastAutoShotTime = -Infinity
             this.game.lastManualShotTime = -Infinity
@@ -115,11 +119,6 @@ export class SaveSystem {
             this.game.points = DEV_STARTING_POINTS
             this.game.clickDamage = 1
             this.game.clickUpgradeLevel = 0
-
-            this.game.upgradeSystem.frequencyLevel = 0
-            this.game.upgradeSystem.amplitudeLevel = 0
-            this.game.upgradeSystem.fireRateLevel = 0
-            this.game.upgradeSystem.strengthLevel = 0
 
             this.game.targetUpgradeSystem.valueLevel = 0
             this.game.targetUpgradeSystem.spawnRateLevel = 0
@@ -156,7 +155,11 @@ export class SaveSystem {
                 amplitude: stats.amplitude,
                 width: stats.width,
                 fireRate: stats.fireRate,
-                strength: stats.strength
+                strength: stats.strength,
+                frequencyLevel: stats.frequencyLevel ?? 0,
+                amplitudeLevel: stats.amplitudeLevel ?? 0,
+                fireRateLevel: stats.fireRateLevel ?? 0,
+                strengthLevel: stats.strengthLevel ?? 0
             }
         }
 
@@ -164,20 +167,23 @@ export class SaveSystem {
 
     }
 
-    applyLaserTypeStats(savedStats) {
-
-        if (!savedStats || typeof savedStats !== "object") return
+    applyLaserTypeStats(savedStats, legacyLevels) {
+        const savedLaserStats = (savedStats && typeof savedStats === "object")
+            ? savedStats
+            : {}
 
         for (const [typeId, baseStats] of Object.entries(this.game.laserTypeStats)) {
-            const typeSave = savedStats[typeId]
+            const typeSave = savedLaserStats[typeId]
 
-            if (!typeSave || typeof typeSave !== "object") continue
-
-            baseStats.frequency = this.readNumber(typeSave.frequency, baseStats.frequency)
-            baseStats.amplitude = this.readNumber(typeSave.amplitude, baseStats.amplitude)
-            baseStats.width = this.readNumber(typeSave.width, baseStats.width)
-            baseStats.fireRate = this.readNumber(typeSave.fireRate, baseStats.fireRate)
-            baseStats.strength = this.readNumber(typeSave.strength, baseStats.strength)
+            baseStats.frequency = this.readNumber(typeSave?.frequency, baseStats.frequency)
+            baseStats.amplitude = this.readNumber(typeSave?.amplitude, baseStats.amplitude)
+            baseStats.width = this.readNumber(typeSave?.width, baseStats.width)
+            baseStats.fireRate = this.readNumber(typeSave?.fireRate, baseStats.fireRate)
+            baseStats.strength = this.readNumber(typeSave?.strength, baseStats.strength)
+            baseStats.frequencyLevel = this.readNumber(typeSave?.frequencyLevel, legacyLevels.frequencyLevel)
+            baseStats.amplitudeLevel = this.readNumber(typeSave?.amplitudeLevel, legacyLevels.amplitudeLevel)
+            baseStats.fireRateLevel = this.readNumber(typeSave?.fireRateLevel, legacyLevels.fireRateLevel)
+            baseStats.strengthLevel = this.readNumber(typeSave?.strengthLevel, legacyLevels.strengthLevel)
         }
 
     }

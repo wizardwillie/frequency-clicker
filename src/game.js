@@ -166,7 +166,11 @@ export class Game {
                 amplitude: laserType.baseAmplitude,
                 width: laserType.baseWidth,
                 fireRate: laserType.baseFireRate,
-                strength: LASER_BASE_STRENGTH
+                strength: LASER_BASE_STRENGTH,
+                frequencyLevel: 0,
+                amplitudeLevel: 0,
+                fireRateLevel: 0,
+                strengthLevel: 0
             }
         }
 
@@ -836,6 +840,7 @@ export class Game {
             const fireRateCost = this.upgradeSystem.getFireRateCost()
             const strengthCost = this.upgradeSystem.getStrengthCost()
             const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
+            const activeLaserStats = this.laserTypeStats[this.currentLaserType]
             const targetValueCost = this.targetUpgradeSystem.getValueCost()
             const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
             const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
@@ -846,7 +851,7 @@ export class Game {
                 this.frequencyButton,
                 "Increase Frequency",
                 frequencyCost,
-                this.upgradeSystem.frequencyLevel,
+                activeLaserStats.frequencyLevel,
                 this.points >= frequencyCost
             )
 
@@ -854,7 +859,7 @@ export class Game {
                 this.amplitudeButton,
                 "Increase Amplitude",
                 amplitudeCost,
-                this.upgradeSystem.amplitudeLevel,
+                activeLaserStats.amplitudeLevel,
                 this.points >= amplitudeCost
             )
 
@@ -863,7 +868,7 @@ export class Game {
                     this.fireRateButton,
                     "Increase Fire Rate",
                     fireRateCost,
-                    this.upgradeSystem.fireRateLevel,
+                    activeLaserStats.fireRateLevel,
                     this.points >= fireRateCost
                 )
             }
@@ -872,7 +877,7 @@ export class Game {
                 this.strengthButton,
                 "Increase Laser Strength",
                 strengthCost,
-                this.upgradeSystem.strengthLevel,
+                activeLaserStats.strengthLevel,
                 !strengthMaxed && this.points >= strengthCost
             )
 
