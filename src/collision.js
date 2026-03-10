@@ -125,42 +125,8 @@ export class CollisionSystem {
 
     spawnExplosionParticles(x, y, particleCount, color) {
 
-        for (let i = 0; i < particleCount; i++) {
-            const angle = Math.random() * Math.PI * 2
-            const speed = 60 + Math.random() * 90
-            const particle = {
-                x,
-                y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                radius: 1.5 + Math.random() * 2,
-                life: 0.28,
-                maxLife: 0.28,
-                color,
-                update(delta) {
-                    this.x += this.vx * delta
-                    this.y += this.vy * delta
-                    this.life -= delta
-                },
-                draw(ctx) {
-                    ctx.save()
-                    ctx.globalAlpha = Math.max(this.life / this.maxLife, 0)
-                    ctx.fillStyle = this.color
-                    ctx.beginPath()
-                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2)
-                    ctx.fill()
-                    ctx.restore()
-                }
-            }
-
-            this.game.floatingTexts.push(particle)
-        }
-
-    }
-
-    spawnSplitterExplosionParticles(x, y) {
-
-        this.spawnExplosionParticles(x, y, 6, "#ffbf72")
+        if (!this.game.particleSystem) return
+        this.game.particleSystem.spawnExplosion(x, y, particleCount, color)
 
     }
 
@@ -175,7 +141,7 @@ export class CollisionSystem {
         spawnSystem.spawnTarget({ forceType: "splitter", allowBoss: false })
         spawnSystem.spawnTarget({ forceType: "swarm", allowBoss: false })
 
-        this.spawnExplosionParticles(sourceTarget.x, sourceTarget.y, 15, "#ff6a6a")
+        this.spawnExplosionParticles(sourceTarget.x, sourceTarget.y, 40, "#ff4a4a")
 
         this.game.floatingTexts.push({
             x: sourceTarget.x - 72,
@@ -262,24 +228,32 @@ export class CollisionSystem {
                         continue
                     }
 
-                    const damage = Math.max(1, laser.strength || 1)
+                    const overchargeBonus = 1 + (this.game.laserOvercharge * 0.015)
+                    const damage = Math.max(1, (laser.strength || 1) * overchargeBonus)
                     target.hitFlashTime = target.hitFlashDuration
                     target.health -= damage
+                    this.spawnExplosionParticles(target.x, target.y, 3, "#ffb84d")
 
                     if (target.health > 0) {
                         continue
                     }
 
                     if (target.type === "splitter") {
-                        this.spawnSplitterExplosionParticles(target.x, target.y)
                         this.spawnSplitterFragments(target)
                     }
 
                     if (target.type === "boss") {
                         this.spawnBossDeathBurst(target)
+                    } else {
+                        this.spawnExplosionParticles(target.x, target.y, 12, "#ffb84d")
                     }
 
                     this.game.points += target.value
+                    const overchargeGain = target.type === "boss" ? 10 : 2
+                    this.game.laserOvercharge = Math.min(
+                        this.game.maxLaserOvercharge,
+                        this.game.laserOvercharge + overchargeGain
+                    )
                     const rewardColor =
                         target.type === "armored"
                             ? "#8fff8f"

@@ -7,4 +7,8 @@ canvas.height = 700
 
 const game = new Game(canvas)
 
+window.addEventListener("beforeunload", () => {
+    game.saveSystem.save()
+})
+
 game.start()
