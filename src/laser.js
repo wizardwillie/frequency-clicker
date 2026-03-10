@@ -77,18 +77,26 @@ export class Laser {
         }
 
         ctx.save()
-        ctx.globalAlpha = 0.15
         ctx.strokeStyle = this.color
-        ctx.lineWidth = this.width * 2.5 * this.glowMultiplier * overchargeMultiplier
         ctx.lineCap = "round"
+
+        // Bloom pass 1 (wide glow)
+        ctx.globalCompositeOperation = "lighter"
+        ctx.globalAlpha = 0.08
+        ctx.lineWidth = scaledWidth * 8 * this.glowMultiplier
+        ctx.stroke()
+
+        // Bloom pass 2 (core glow)
+        ctx.globalAlpha = 0.25
+        ctx.lineWidth = scaledWidth * 3 * this.glowMultiplier
+        ctx.stroke()
+
+        // Final beam
+        ctx.globalCompositeOperation = "source-over"
+        ctx.globalAlpha = 1
+        ctx.lineWidth = scaledWidth
         ctx.stroke()
         ctx.restore()
-
-        ctx.strokeStyle = this.color
-        ctx.lineWidth = scaledWidth
-        ctx.lineCap = "round"
-
-        ctx.stroke()
 
         if (this.flashTime > 0) {
 
