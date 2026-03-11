@@ -83,6 +83,9 @@ export class Game {
         this.autoFireUnlocked = false
         this.autoFireEnabled = false
         this.plasmaUnlockPoints = PLASMA_UNLOCK_POINTS
+        this.pulseUnlockPoints = Math.floor(this.plasmaUnlockPoints * 2)
+        this.scatterUnlockPoints = Math.floor(this.plasmaUnlockPoints * 5)
+        this.heavyUnlockPoints = Math.floor(this.plasmaUnlockPoints * 10)
         this.plasmaUnlocked = false
         this.pulseUnlocked = false
         this.scatterUnlocked = false
@@ -377,6 +380,152 @@ export class Game {
 
     }
 
+    getLaserProgressionOrder() {
+
+        return [
+            "simple",
+            "plasma",
+            "pulse",
+            "scatter",
+            "heavy"
+        ]
+
+    }
+
+    getVisibleLaserTypes() {
+
+        const progressionOrder = this.getLaserProgressionOrder()
+        const visibleLaserTypes = []
+
+        for (const typeId of progressionOrder) {
+            if (this.isLaserUnlocked(typeId)) {
+                visibleLaserTypes.push(typeId)
+            }
+        }
+
+        const nextType = progressionOrder.find(typeId => !this.isLaserUnlocked(typeId))
+        if (nextType && !visibleLaserTypes.includes(nextType)) {
+            visibleLaserTypes.push(nextType)
+        }
+
+        if (visibleLaserTypes.length === 0 && progressionOrder.length > 0) {
+            visibleLaserTypes.push(progressionOrder[0])
+        }
+
+        return visibleLaserTypes
+
+    }
+
+    getLaserButton(typeId) {
+
+        if (typeId === "simple") return this.simpleLaserButton
+        if (typeId === "plasma") return this.plasmaLaserButton
+        if (typeId === "pulse") return this.pulseLaserButton
+        if (typeId === "scatter") return this.scatterLaserButton
+        if (typeId === "heavy") return this.heavyLaserButton
+        return null
+
+    }
+
+    getLaserUnlockCost(typeId) {
+
+        if (typeId === "plasma") return this.plasmaUnlockPoints
+        if (typeId === "pulse") return this.pulseUnlockPoints
+        if (typeId === "scatter") return this.scatterUnlockPoints
+        if (typeId === "heavy") return this.heavyUnlockPoints
+        return 0
+
+    }
+
+    getNextProgressionLaserType() {
+
+        return this.getLaserProgressionOrder().find(typeId => !this.isLaserUnlocked(typeId)) || null
+
+    }
+
+    isNextPurchasableLaser(typeId) {
+
+        if (!typeId || typeId === "simple") return false
+        return this.getNextProgressionLaserType() === typeId
+
+    }
+
+    buyPlasmaLaser() {
+
+        if (this.plasmaUnlocked) return true
+        if (!this.isNextPurchasableLaser("plasma")) return false
+
+        const cost = this.getLaserUnlockCost("plasma")
+        if (this.points < cost) return false
+
+        this.points -= cost
+        this.plasmaUnlocked = true
+        return true
+
+    }
+
+    buyPulseLaser() {
+
+        if (this.pulseUnlocked) return true
+        if (!this.isNextPurchasableLaser("pulse")) return false
+
+        const cost = this.getLaserUnlockCost("pulse")
+        if (this.points < cost) return false
+
+        this.points -= cost
+        this.pulseUnlocked = true
+        return true
+
+    }
+
+    buyScatterLaser() {
+
+        if (this.scatterUnlocked) return true
+        if (!this.isNextPurchasableLaser("scatter")) return false
+
+        const cost = this.getLaserUnlockCost("scatter")
+        if (this.points < cost) return false
+
+        this.points -= cost
+        this.scatterUnlocked = true
+        return true
+
+    }
+
+    buyHeavyLaser() {
+
+        if (this.heavyUnlocked) return true
+        if (!this.isNextPurchasableLaser("heavy")) return false
+
+        const cost = this.getLaserUnlockCost("heavy")
+        if (this.points < cost) return false
+
+        this.points -= cost
+        this.heavyUnlocked = true
+        return true
+
+    }
+
+    tryPurchaseLaser(typeId) {
+
+        if (typeId === "plasma") return this.buyPlasmaLaser()
+        if (typeId === "pulse") return this.buyPulseLaser()
+        if (typeId === "scatter") return this.buyScatterLaser()
+        if (typeId === "heavy") return this.buyHeavyLaser()
+        return false
+
+    }
+
+    hasAnyLaserMasteryUnlocked() {
+
+        return (
+            this.isLaserUnlocked("pulse") ||
+            this.isLaserUnlocked("scatter") ||
+            this.isLaserUnlocked("heavy")
+        )
+
+    }
+
     getCurrentWorldConfig() {
 
         return WORLD_DATA[this.worldLevel] || WORLD_DATA[1]
@@ -579,25 +728,25 @@ export class Game {
         const buttons = []
 
         if (this.isPanelSectionExpanded("lasers")) {
-            if (!this.plasmaUnlocked) {
-                buttons.push(this.plasmaUnlockButton)
-            } else {
-                buttons.push(
-                    this.simpleLaserButton,
-                    this.plasmaLaserButton,
-                    this.pulseLaserButton,
-                    this.scatterLaserButton,
-                    this.heavyLaserButton
-                )
+            const visibleLaserTypes = this.getVisibleLaserTypes()
+            for (const typeId of visibleLaserTypes) {
+                const button = this.getLaserButton(typeId)
+                if (button) {
+                    buttons.push(button)
+                }
             }
         }
 
-        if (this.plasmaUnlocked && this.isPanelSectionExpanded("mastery")) {
-            buttons.push(
-                this.pulseMasteryButton,
-                this.scatterMasteryButton,
-                this.heavyMasteryButton
-            )
+        if (this.hasAnyLaserMasteryUnlocked() && this.isPanelSectionExpanded("mastery")) {
+            if (this.isLaserUnlocked("pulse")) {
+                buttons.push(this.pulseMasteryButton)
+            }
+            if (this.isLaserUnlocked("scatter")) {
+                buttons.push(this.scatterMasteryButton)
+            }
+            if (this.isLaserUnlocked("heavy")) {
+                buttons.push(this.heavyMasteryButton)
+            }
         }
 
         if (this.isPanelSectionExpanded("laserUpgrades")) {
@@ -778,67 +927,50 @@ export class Game {
         }
 
         if (this.isPanelSectionExpanded("lasers")) {
-            if (!this.plasmaUnlocked) {
+            const visibleLaserTypes = this.getVisibleLaserTypes()
+            for (const typeId of visibleLaserTypes) {
+                const button = this.getLaserButton(typeId)
+                if (!button || !this.isInsideButton(mouseX, mouseY, button)) {
+                    continue
+                }
 
-                if (this.isInsideButton(mouseX, mouseY, this.plasmaUnlockButton)) {
+                if (this.isLaserUnlocked(typeId)) {
+                    this.switchLaserType(typeId)
+                    return
+                }
 
-                    if (this.points < this.plasmaUnlockPoints) return
+                if (this.isNextPurchasableLaser(typeId)) {
+                    const purchased = this.tryPurchaseLaser(typeId)
+                    if (!purchased) return
 
-                    this.plasmaUnlocked = true
-                    this.triggerUpgradeFlash(this.plasmaUnlockButton)
+                    const laserName = LASER_TYPES[typeId]?.name || "Laser"
+                    this.triggerUpgradeFlash(button)
                     this.floatingTexts.push(
                         new FloatingText(
                             this.gridX + this.gridWidth / 2,
                             this.canvas.height / 2 - 28,
-                            "Plasma Laser Unlocked"
+                            laserName + " Unlocked"
                         )
                     )
-
-                    return
-                }
-            } else {
-
-                if (this.isInsideButton(mouseX, mouseY, this.simpleLaserButton)) {
-                    this.switchLaserType("simple")
-                    return
-                }
-
-                if (this.isInsideButton(mouseX, mouseY, this.plasmaLaserButton)) {
-                    this.switchLaserType("plasma")
-                    return
-                }
-
-                if (this.isInsideButton(mouseX, mouseY, this.pulseLaserButton)) {
-                    this.switchLaserType("pulse")
-                    return
-                }
-
-                if (this.isInsideButton(mouseX, mouseY, this.scatterLaserButton)) {
-                    this.switchLaserType("scatter")
-                    return
-                }
-
-                if (this.isInsideButton(mouseX, mouseY, this.heavyLaserButton)) {
-                    this.switchLaserType("heavy")
                     return
                 }
             }
         }
 
-        if (this.isPanelSectionExpanded("mastery") && this.plasmaUnlocked) {
-            if (this.isInsideButton(mouseX, mouseY, this.pulseMasteryButton)) {
+        if (this.isPanelSectionExpanded("mastery") && this.hasAnyLaserMasteryUnlocked()) {
+            if (this.isLaserUnlocked("pulse") && this.isInsideButton(mouseX, mouseY, this.pulseMasteryButton)) {
                 const purchased = this.upgradeSystem.buy("pulseMastery")
                 if (purchased) this.triggerUpgradeFlash(this.pulseMasteryButton)
                 return
             }
 
-            if (this.isInsideButton(mouseX, mouseY, this.scatterMasteryButton)) {
+            if (this.isLaserUnlocked("scatter") && this.isInsideButton(mouseX, mouseY, this.scatterMasteryButton)) {
                 const purchased = this.upgradeSystem.buy("scatterMastery")
                 if (purchased) this.triggerUpgradeFlash(this.scatterMasteryButton)
                 return
             }
 
-            if (this.isInsideButton(mouseX, mouseY, this.heavyMasteryButton)) {
+            if (this.isLaserUnlocked("heavy") && this.isInsideButton(mouseX, mouseY, this.heavyMasteryButton)) {
                 const purchased = this.upgradeSystem.buy("heavyMastery")
                 if (purchased) this.triggerUpgradeFlash(this.heavyMasteryButton)
                 return
@@ -1766,7 +1898,7 @@ export class Game {
 
         y = this.drawPanelSection("lasers", "LASERS", y)
 
-        if (this.hasLaser && this.plasmaUnlocked) {
+        if (this.hasLaser && this.hasAnyLaserMasteryUnlocked()) {
             y = this.drawPanelSection("mastery", "LASER MASTERY", y)
         }
 
@@ -1834,38 +1966,27 @@ export class Game {
                 return contentY + this.unlockButton.height + cardSpacing
             }
 
-            if (!this.plasmaUnlocked) {
-                this.plasmaUnlockButton.y = contentY
+            const visibleLaserTypes = this.getVisibleLaserTypes()
+            for (const typeId of visibleLaserTypes) {
+                const button = this.getLaserButton(typeId)
+                if (!button) continue
 
-                if (!isLayoutOnly) {
-                    this.drawPanelActionButton(
-                        this.plasmaUnlockButton,
-                        "Unlock Plasma Laser",
-                        "Milestone: " + this.plasmaUnlockPoints,
-                        this.points >= this.plasmaUnlockPoints
-                    )
-                }
+                const isUnlocked = this.isLaserUnlocked(typeId)
+                const isActive = isUnlocked && this.currentLaserType === typeId
+                const title = LASER_TYPES[typeId]?.name || typeId
+                const canPurchase = !isUnlocked && this.isNextPurchasableLaser(typeId)
+                const unlockCost = canPurchase ? this.getLaserUnlockCost(typeId) : 0
+                const subtitle = canPurchase ? unlockCost : ""
+                const enabled = isUnlocked || (canPurchase && this.points >= unlockCost)
 
-                return contentY + this.plasmaUnlockButton.height + cardSpacing
-            }
-
-            const laserButtons = [
-                [this.simpleLaserButton, "Simple Laser", this.currentLaserType === "simple"],
-                [this.plasmaLaserButton, "Plasma Laser", this.currentLaserType === "plasma"],
-                [this.pulseLaserButton, "Pulse Laser", this.currentLaserType === "pulse"],
-                [this.scatterLaserButton, "Scatter Laser", this.currentLaserType === "scatter"],
-                [this.heavyLaserButton, "Heavy Laser", this.currentLaserType === "heavy"]
-            ]
-
-            for (const [button, title, isActive] of laserButtons) {
                 button.y = contentY
 
                 if (!isLayoutOnly) {
                     this.drawPanelActionButton(
                         button,
                         title,
-                        isActive ? "Active" : "Switch",
-                        true,
+                        subtitle,
+                        enabled,
                         isActive
                     )
                 }
@@ -1877,41 +1998,47 @@ export class Game {
         }
 
         if (sectionId === "mastery") {
-            this.pulseMasteryButton.y = contentY
-            if (!isLayoutOnly) {
-                this.drawPanelButton(
-                    this.pulseMasteryButton,
-                    "Pulse Mastery",
-                    this.upgradeSystem.getPulseMasteryCost(),
-                    this.pulseMasteryLevel,
-                    this.points >= this.upgradeSystem.getPulseMasteryCost()
-                )
+            if (this.isLaserUnlocked("pulse")) {
+                this.pulseMasteryButton.y = contentY
+                if (!isLayoutOnly) {
+                    this.drawPanelButton(
+                        this.pulseMasteryButton,
+                        "Pulse Mastery",
+                        this.upgradeSystem.getPulseMasteryCost(),
+                        this.pulseMasteryLevel,
+                        this.points >= this.upgradeSystem.getPulseMasteryCost()
+                    )
+                }
+                contentY += this.pulseMasteryButton.height + cardSpacing
             }
-            contentY += this.pulseMasteryButton.height + cardSpacing
 
-            this.scatterMasteryButton.y = contentY
-            if (!isLayoutOnly) {
-                this.drawPanelButton(
-                    this.scatterMasteryButton,
-                    "Scatter Mastery",
-                    this.upgradeSystem.getScatterMasteryCost(),
-                    this.scatterMasteryLevel,
-                    this.points >= this.upgradeSystem.getScatterMasteryCost()
-                )
+            if (this.isLaserUnlocked("scatter")) {
+                this.scatterMasteryButton.y = contentY
+                if (!isLayoutOnly) {
+                    this.drawPanelButton(
+                        this.scatterMasteryButton,
+                        "Scatter Mastery",
+                        this.upgradeSystem.getScatterMasteryCost(),
+                        this.scatterMasteryLevel,
+                        this.points >= this.upgradeSystem.getScatterMasteryCost()
+                    )
+                }
+                contentY += this.scatterMasteryButton.height + cardSpacing
             }
-            contentY += this.scatterMasteryButton.height + cardSpacing
 
-            this.heavyMasteryButton.y = contentY
-            if (!isLayoutOnly) {
-                this.drawPanelButton(
-                    this.heavyMasteryButton,
-                    "Heavy Mastery",
-                    this.upgradeSystem.getHeavyMasteryCost(),
-                    this.heavyMasteryLevel,
-                    this.points >= this.upgradeSystem.getHeavyMasteryCost()
-                )
+            if (this.isLaserUnlocked("heavy")) {
+                this.heavyMasteryButton.y = contentY
+                if (!isLayoutOnly) {
+                    this.drawPanelButton(
+                        this.heavyMasteryButton,
+                        "Heavy Mastery",
+                        this.upgradeSystem.getHeavyMasteryCost(),
+                        this.heavyMasteryLevel,
+                        this.points >= this.upgradeSystem.getHeavyMasteryCost()
+                    )
+                }
+                contentY += this.heavyMasteryButton.height + cardSpacing
             }
-            contentY += this.heavyMasteryButton.height + cardSpacing
 
             return contentY
         }
@@ -2335,7 +2462,8 @@ export class Game {
             unlocked = true,
             hovered = false,
             flashIntensity = 0,
-            iconId = null
+            iconId = null,
+            stackSubtitle = false
         } = state
 
         const radius = 12
@@ -2509,10 +2637,13 @@ export class Game {
         }
 
         const textX = iconX + iconSize + 12
-        const titleY = y + 20
+        const titleY = stackSubtitle ? y + 10 : y + 20
+        const subtitleY = titleY + 16
         const costY = y + height - 12
         const titleText = String(title).toUpperCase()
         const costText = String(cost || "")
+        const textRightPadding = level > 0 ? 72 : 12
+        const maxTextWidth = Math.max(0, width - (textX - x) - textRightPadding)
         const titleColor = selected
             ? "#9b5cff"
             : unlocked
@@ -2523,12 +2654,24 @@ export class Game {
         ctx.font = "700 12px Arial"
         ctx.textAlign = "left"
         ctx.textBaseline = "top"
-        ctx.fillText(titleText, textX, titleY)
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(textX, titleY, maxTextWidth, 14)
+        ctx.clip()
+        ctx.fillText(titleText, textX, titleY, maxTextWidth)
+        ctx.restore()
 
-        ctx.fillStyle = canAfford ? "#a6d1ff" : "rgba(255,255,255,0.6)"
-        ctx.font = "12px monospace"
-        ctx.textBaseline = "alphabetic"
-        ctx.fillText(costText, textX, costY)
+        if (costText) {
+            ctx.fillStyle = canAfford ? "#a6d1ff" : "rgba(255,255,255,0.6)"
+            ctx.font = "12px monospace"
+            if (stackSubtitle) {
+                ctx.textBaseline = "top"
+                ctx.fillText(costText, textX, subtitleY, maxTextWidth)
+            } else {
+                ctx.textBaseline = "alphabetic"
+                ctx.fillText(costText, textX, costY, maxTextWidth)
+            }
+        }
 
         if (level > 0) {
             const badgeText = "LV " + level
@@ -2566,26 +2709,36 @@ export class Game {
     drawPanelActionButton(button, title, subtitle, enabled, active = false) {
 
         const ctx = this.ctx
+        const normalizedTitle = String(title || "").toLowerCase()
+        const isLaserCard = normalizedTitle.includes("laser")
         const subtitleText = String(subtitle || "").trim().toLowerCase()
         const isSwitchCard = subtitleText === "switch" || subtitleText === "active"
         const hovered = this.isCardHovered(button)
         const flashIntensity = this.getCardFlashIntensity(button)
         const iconId = this.resolveActionCardIconId(title)
-        const costText = isSwitchCard
-            ? ""
-            : typeof subtitle === "number"
-                ? "Cost: " + subtitle
-                : subtitle || (active ? "ONLINE" : "")
+        const hasNumericSubtitle = typeof subtitle === "number"
+
+        let costText = ""
+        if (isLaserCard) {
+            costText = hasNumericSubtitle ? "Cost: " + subtitle : ""
+        } else {
+            costText = isSwitchCard
+                ? ""
+                : hasNumericSubtitle
+                    ? "Cost: " + subtitle
+                    : subtitle || (active ? "ONLINE" : "")
+        }
         const state = {
             title,
             cost: costText,
             level: 0,
             canAfford: enabled,
             selected: active,
-            unlocked: active || isSwitchCard,
+            unlocked: isLaserCard ? (active || !hasNumericSubtitle) : (active || isSwitchCard),
             hovered,
             flashIntensity,
-            iconId
+            iconId,
+            stackSubtitle: isLaserCard
         }
 
         this.drawUpgradeCard(ctx, button.x, button.y, button.width, button.height, state)
