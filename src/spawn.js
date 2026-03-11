@@ -157,6 +157,10 @@ export class SpawnSystem {
         const direction = Math.random() < 0.5 ? 1 : -1
         const baseSpeed = 100 + Math.random() * 100
         const baseValue = TARGET_VALUE_BASE
+        const worldLevel = this.game.worldLevel ?? 1
+        const worldHealthMultiplier = 1 + (worldLevel * 0.4)
+        const worldSpeedMultiplier = 1 + (worldLevel * 0.1)
+        const worldValueMultiplier = 1 + (worldLevel * 0.3)
         const targetUpgrades = this.game.targetUpgradeSystem
         const diversityLevel = targetUpgrades ? targetUpgrades.diversityLevel : 0
         const weightedTypes = [
@@ -287,16 +291,18 @@ export class SpawnSystem {
             1 +
             (valueLevel * 0.15) +
             (spawnRateLevel * 0.25)
-        maxHealth = Math.max(1, Math.round(maxHealth * healthMultiplier))
+        maxHealth = Math.max(1, Math.round(maxHealth * healthMultiplier * worldHealthMultiplier))
         const value = Math.max(
             1,
-            Math.round(baseValue * valueMultiplier * valueMultiplierFromUpgrades)
+            Math.round(baseValue * valueMultiplier * valueMultiplierFromUpgrades * worldValueMultiplier)
         )
 
         if (type === "swarm") {
-            this.spawnSwarmGroup(direction, baseSpeed, value, maxHealth, radius)
+            this.spawnSwarmGroup(direction, baseSpeed * worldSpeedMultiplier, value, maxHealth, radius)
             return { spawned: true, spawnedBoss: false }
         }
+
+        speed *= worldSpeedMultiplier
 
         const target = new Target(0, 0, direction, speed, value, {
             type,

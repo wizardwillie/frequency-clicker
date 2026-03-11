@@ -5,6 +5,12 @@ export const BASE_MANUAL_FIRE_COOLDOWN = 0.15
 export const DEV_STARTING_POINTS = 1000000
 export const GAME_STATE_TITLE = "title"
 export const GAME_STATE_PLAYING = "playing"
+export const WORLD_START_LEVEL = 1
+export const TRANSPORT_INITIAL_CHARGE_REQUIRED = 200
+export const TRANSPORT_CHARGE_PER_KILL = 1
+export const TRANSPORT_BOSS_CHARGE_BONUS = 20
+export const TRANSPORT_CHARGE_GROWTH = 2
+export const WORLD_SPAWN_RATE_GROWTH = 1.35
 
 export const LASER_BASE_FREQUENCY = 0.005
 export const LASER_BASE_AMPLITUDE = 50

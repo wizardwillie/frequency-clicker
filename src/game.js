@@ -3,6 +3,7 @@ import { Laser } from "./laser.js"
 import { CollisionSystem } from "./collision.js"
 import { FloatingText } from "./floatingText.js"
 import { ParticleSystem } from "./particles.js"
+import { TransportBeam } from "./transportBeam.js"
 import { UpgradeSystem } from "./upgrades.js"
 import { TargetUpgradeSystem } from "./targetUpgrades.js"
 import { ClickUpgradeSystem } from "./clickUpgrades.js"
@@ -18,7 +19,11 @@ import {
     LASER_BASE_STRENGTH,
     MAX_LASER_STRENGTH,
     GAME_STATE_TITLE,
-    GAME_STATE_PLAYING
+    GAME_STATE_PLAYING,
+    WORLD_START_LEVEL,
+    TRANSPORT_INITIAL_CHARGE_REQUIRED,
+    TRANSPORT_CHARGE_GROWTH,
+    WORLD_SPAWN_RATE_GROWTH
 } from "./constants.js"
 
 export class Game {
@@ -28,6 +33,13 @@ export class Game {
         this.canvas = canvas
         this.ctx = canvas.getContext("2d")
         this.gameState = GAME_STATE_TITLE
+        this.worldLevel = WORLD_START_LEVEL
+        this.transportCharge = 0
+        this.transportChargeRequired = TRANSPORT_INITIAL_CHARGE_REQUIRED
+        this.transportReady = false
+        this.transportAnimating = false
+        this.transportAnimationTime = 0
+        this.transportAnimationDuration = 1.2
 
         this.lastTime = 0
         this.points = DEV_STARTING_POINTS
@@ -139,10 +151,12 @@ export class Game {
             width: this.panelWidth - 40,
             height: 30
         }
+        this.worldSectionY = this.autoFireButton.y + 76
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
         this.particleSystem = new ParticleSystem(this)
+        this.transportBeam = new TransportBeam(this)
         this.upgradeSystem = new UpgradeSystem(this)
         this.targetUpgradeSystem = new TargetUpgradeSystem(this)
         this.clickUpgradeSystem = new ClickUpgradeSystem(this)
@@ -254,7 +268,10 @@ export class Game {
 
     getPanelContentHeight() {
 
-        return this.autoFireButton.y + this.autoFireButton.height + 40
+        return Math.max(
+            this.autoFireButton.y + this.autoFireButton.height + 40,
+            this.worldSectionY + 120
+        )
 
     }
 
@@ -475,6 +492,7 @@ export class Game {
     fireLaser() {
 
         if (!this.hasLaser) return
+        if (this.transportAnimating) return
 
         const phase = Math.random() * Math.PI * 2
         const laserType = LASER_TYPES[this.currentLaserType]
@@ -484,6 +502,70 @@ export class Game {
         const laser = new Laser(this, phase, color)
         laser.fire()
         this.lasers.push(laser)
+
+    }
+
+    addTransportCharge(amount) {
+
+        if (!Number.isFinite(amount) || amount <= 0) return
+        if (this.transportReady) return
+
+        this.transportCharge += amount
+
+        if (this.transportCharge >= this.transportChargeRequired) {
+            this.transportCharge = this.transportChargeRequired
+            this.transportReady = true
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    this.gridX + this.gridWidth / 2,
+                    this.canvas.height / 2,
+                    "TRANSPORT READY",
+                    "#9bf3ff"
+                )
+            )
+        }
+
+    }
+
+    startTransportAnimation() {
+
+        if (!this.transportReady) return
+        if (this.transportAnimating) return
+
+        this.transportAnimating = true
+        this.transportAnimationTime = 0
+
+        this.floatingTexts.push(
+            new FloatingText(
+                this.gridX + this.gridWidth / 2,
+                this.canvas.height / 2 + 26,
+                "TRANSPORT ENGAGED",
+                "#d9f8ff"
+            )
+        )
+
+    }
+
+    advanceWorld() {
+
+        this.worldLevel += 1
+        this.transportCharge = 0
+        this.transportReady = false
+        this.transportChargeRequired = Math.floor(this.transportChargeRequired * TRANSPORT_CHARGE_GROWTH)
+        this.targets = []
+        this.lasers = []
+        this.transportBeam.particles = []
+        this.spawnSystem.baseSpawnRate *= WORLD_SPAWN_RATE_GROWTH
+
+        this.floatingTexts.push(
+            new FloatingText(
+                this.gridX + this.gridWidth / 2,
+                this.canvas.height / 2 - 24,
+                "World " + this.worldLevel,
+                "#c6f5ff"
+            )
+        )
 
     }
 
@@ -497,6 +579,13 @@ export class Game {
     }
 
     handleGridClick(mouseX, mouseY) {
+
+        if (this.transportReady && this.transportBeam.isPointInside(mouseX, mouseY)) {
+            this.startTransportAnimation()
+            return
+        }
+
+        if (this.transportAnimating) return
 
         // 1. Check if clicking a target
         for (let i = this.targets.length - 1; i >= 0; i--) {
@@ -584,6 +673,24 @@ export class Game {
         if (this.gridOffset > 40) {
             this.gridOffset = 0
         }
+        this.transportBeam.update(delta)
+
+        if (this.transportAnimating) {
+            this.transportAnimationTime += delta
+
+            for (const text of this.floatingTexts) {
+                text.update(delta)
+            }
+            this.floatingTexts = this.floatingTexts.filter(t => t.life > 0)
+
+            if (this.transportAnimationTime >= this.transportAnimationDuration) {
+                this.transportAnimating = false
+                this.transportAnimationTime = 0
+                this.advanceWorld()
+            }
+
+            return
+        }
 
         this.laserOvercharge = Math.max(
             0,
@@ -623,6 +730,7 @@ export class Game {
 
         if (!this.hasLaser) return
         if (!this.autoFireEnabled) return
+        if (this.transportAnimating) return
 
         const now = performance.now() / 1000
         const autoFireInterval = this.fireInterval * this.autoFireSpeedMultiplier
@@ -651,6 +759,7 @@ export class Game {
 
         this.drawPanel()
         this.drawGrid()
+        this.transportBeam.draw(this.ctx)
 
         for (let target of this.targets) {
             target.draw(this.ctx)
@@ -724,7 +833,8 @@ export class Game {
         ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
         ctx.clip()
 
-        ctx.strokeStyle = "#2a5fff"
+        const gridColor = this.worldLevel >= 2 ? "#7a4dff" : "#2a5fff"
+        ctx.strokeStyle = gridColor
 
         // Glow pass
         ctx.globalAlpha = 0.05
@@ -932,6 +1042,26 @@ export class Game {
                 )
             }
 
+        }
+
+        this.drawPanelSectionHeader("WORLD", 20, this.worldSectionY)
+        ctx.fillStyle = "#1f1f1f"
+        ctx.font = "16px Arial"
+        ctx.fillText("World Level: " + this.worldLevel, 20, this.worldSectionY + 30)
+        ctx.fillText(
+            "Transport Charge: " + this.transportCharge + " / " + this.transportChargeRequired,
+            20,
+            this.worldSectionY + 54
+        )
+
+        if (this.transportAnimating) {
+            ctx.fillStyle = "#6d5fbf"
+            ctx.font = "bold 16px Arial"
+            ctx.fillText("TRANSPORTING...", 20, this.worldSectionY + 80)
+        } else if (this.transportReady) {
+            ctx.fillStyle = "#0f6a7a"
+            ctx.font = "bold 16px Arial"
+            ctx.fillText("ACTIVATE TRANSPORT BEAM", 20, this.worldSectionY + 80)
         }
 
         ctx.restore()

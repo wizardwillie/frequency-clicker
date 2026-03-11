@@ -7,7 +7,9 @@ import {
     TARGET_FAST_RADIUS,
     TARGET_FAST_SPEED_MULTIPLIER,
     MAX_ACTIVE_TARGETS,
-    MAX_REFLECTED_LASERS_PER_FRAME
+    MAX_REFLECTED_LASERS_PER_FRAME,
+    TRANSPORT_CHARGE_PER_KILL,
+    TRANSPORT_BOSS_CHARGE_BONUS
 } from "./constants.js"
 
 export class CollisionSystem {
@@ -247,6 +249,11 @@ export class CollisionSystem {
                     } else {
                         this.spawnExplosionParticles(target.x, target.y, 12, "#ffb84d")
                     }
+
+                    const transportChargeGain = target.type === "boss"
+                        ? TRANSPORT_BOSS_CHARGE_BONUS
+                        : TRANSPORT_CHARGE_PER_KILL
+                    this.game.addTransportCharge(transportChargeGain)
 
                     this.game.points += target.value
                     const overchargeGain = target.type === "boss" ? 10 : 2
