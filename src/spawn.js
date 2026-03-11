@@ -54,6 +54,20 @@ import {
     MAX_ACTIVE_TARGETS
 } from "./constants.js"
 
+const TARGET_PHASE_CHANCE = 0.04
+const TARGET_CHARGER_CHANCE = 0.05
+const TARGET_PHASE_HEALTH = 18
+const TARGET_CHARGER_HEALTH = 20
+const TARGET_PHASE_RADIUS = 16
+const TARGET_CHARGER_RADIUS = 19
+const TARGET_PHASE_VALUE_MULTIPLIER = 11
+const TARGET_CHARGER_VALUE_MULTIPLIER = 12
+const TARGET_CHARGER_BASE_SPEED_MULTIPLIER = 0.7
+const TARGET_PHASE_DURATION = 2.2
+const TARGET_CHARGER_COOLDOWN = 2.8
+const TARGET_CHARGER_BURST_DURATION = 0.48
+const TARGET_CHARGER_BURST_MULTIPLIER = 3.1
+
 export class SpawnSystem {
 
     constructor(game) {
@@ -161,6 +175,7 @@ export class SpawnSystem {
         const worldHealthMultiplier = 1 + (worldLevel * 0.4)
         const worldSpeedMultiplier = 1 + (worldLevel * 0.1)
         const worldValueMultiplier = 1 + (worldLevel * 0.3)
+        const worldTwoUnlocked = worldLevel >= 2
         const targetUpgrades = this.game.targetUpgradeSystem
         const diversityLevel = targetUpgrades ? targetUpgrades.diversityLevel : 0
         const weightedTypes = [
@@ -173,6 +188,16 @@ export class SpawnSystem {
                 type: "heavy",
                 chance: TARGET_HEAVY_CHANCE,
                 unlocked: diversityLevel >= TARGET_HEAVY_UNLOCK_LEVEL
+            },
+            {
+                type: "phase",
+                chance: TARGET_PHASE_CHANCE,
+                unlocked: worldTwoUnlocked
+            },
+            {
+                type: "charger",
+                chance: TARGET_CHARGER_CHANCE,
+                unlocked: worldTwoUnlocked
             },
             {
                 type: "shielded",
@@ -238,6 +263,14 @@ export class SpawnSystem {
         let speed = baseSpeed
         let radius
         let hasShield = false
+        let phaseDuration = TARGET_PHASE_DURATION
+        let phaseTimer = 0
+        let isPhased = false
+        let chargeCooldown = TARGET_CHARGER_COOLDOWN
+        let chargeTimer = 0
+        let chargeBurstDuration = TARGET_CHARGER_BURST_DURATION
+        let chargeBurstTime = 0
+        let chargeSpeedMultiplier = TARGET_CHARGER_BURST_MULTIPLIER
 
         if (type === "boss") {
             valueMultiplier = TARGET_BOSS_VALUE_MULTIPLIER
@@ -249,6 +282,23 @@ export class SpawnSystem {
             maxHealth = TARGET_HEAVY_HEALTH
             radius = TARGET_HEAVY_RADIUS
             speed = baseSpeed * TARGET_HEAVY_SPEED_MULTIPLIER
+        } else if (type === "phase") {
+            valueMultiplier = TARGET_PHASE_VALUE_MULTIPLIER
+            maxHealth = TARGET_PHASE_HEALTH
+            radius = TARGET_PHASE_RADIUS
+            phaseDuration = TARGET_PHASE_DURATION * (0.9 + Math.random() * 0.2)
+            phaseTimer = Math.random() * phaseDuration
+            isPhased = Math.random() < 0.3
+        } else if (type === "charger") {
+            valueMultiplier = TARGET_CHARGER_VALUE_MULTIPLIER
+            maxHealth = TARGET_CHARGER_HEALTH
+            radius = TARGET_CHARGER_RADIUS
+            speed = baseSpeed * TARGET_CHARGER_BASE_SPEED_MULTIPLIER
+            chargeCooldown = TARGET_CHARGER_COOLDOWN * (0.85 + Math.random() * 0.3)
+            chargeTimer = Math.random() * chargeCooldown
+            chargeBurstDuration = TARGET_CHARGER_BURST_DURATION
+            chargeBurstTime = 0
+            chargeSpeedMultiplier = TARGET_CHARGER_BURST_MULTIPLIER
         } else if (type === "shielded") {
             valueMultiplier = TARGET_SHIELDED_VALUE_MULTIPLIER
             maxHealth = TARGET_SHIELDED_HEALTH
@@ -308,7 +358,15 @@ export class SpawnSystem {
             type,
             maxHealth,
             radius,
-            hasShield
+            hasShield,
+            phaseDuration,
+            phaseTimer,
+            isPhased,
+            chargeCooldown,
+            chargeTimer,
+            chargeBurstDuration,
+            chargeBurstTime,
+            chargeSpeedMultiplier
         })
 
         target.y = this.getSpawnY(target.radius)

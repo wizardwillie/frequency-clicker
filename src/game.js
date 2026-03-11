@@ -57,6 +57,9 @@ export class Game {
         this.autoFireEnabled = false
         this.plasmaUnlockPoints = PLASMA_UNLOCK_POINTS
         this.plasmaUnlocked = false
+        this.pulseUnlocked = false
+        this.scatterUnlocked = false
+        this.heavyUnlocked = false
         this.currentLaserType = "simple"
         this.laserTypeStats = this.createLaserTypeStats()
         this.defineLaserStatAccessors()
@@ -66,6 +69,8 @@ export class Game {
         this.laserOvercharge = 0
         this.maxLaserOvercharge = 50
         this.overchargeDecayRate = 6
+        this.scatterBeamCount = 3
+        this.pulseShockwaves = []
         this.autoSaveInterval = 15
         this.autoSaveTimer = 0
         this.panelWidth = 300
@@ -97,57 +102,75 @@ export class Game {
             width: this.panelWidth - 40,
             height: 42
         }
+        this.pulseLaserButton = {
+            x: 20,
+            y: 190,
+            width: this.panelWidth - 40,
+            height: 42
+        }
+        this.scatterLaserButton = {
+            x: 20,
+            y: 240,
+            width: this.panelWidth - 40,
+            height: 42
+        }
+        this.heavyLaserButton = {
+            x: 20,
+            y: 290,
+            width: this.panelWidth - 40,
+            height: 42
+        }
         this.frequencyButton = {
             x: 20,
-            y: 210,
+            y: 360,
             width: this.panelWidth - 40,
             height: 72
         }
         this.amplitudeButton = {
             x: 20,
-            y: 290,
+            y: 440,
             width: this.panelWidth - 40,
             height: 72
         }
         this.fireRateButton = {
             x: 20,
-            y: 370,
+            y: 520,
             width: this.panelWidth - 40,
             height: 72
         }
         this.strengthButton = {
             x: 20,
-            y: 450,
+            y: 600,
             width: this.panelWidth - 40,
             height: 72
         }
         this.targetValueButton = {
             x: 20,
-            y: 560,
+            y: 710,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetSpawnRateButton = {
             x: 20,
-            y: 630,
+            y: 780,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetDiversityButton = {
             x: 20,
-            y: 700,
+            y: 850,
             width: this.panelWidth - 40,
             height: 60
         }
         this.clickDamageButton = {
             x: 20,
-            y: 770,
+            y: 920,
             width: this.panelWidth - 40,
             height: 60
         }
         this.autoFireButton = {
             x: 20,
-            y: 890,
+            y: 1010,
             width: this.panelWidth - 40,
             height: 30
         }
@@ -180,7 +203,7 @@ export class Game {
                 amplitude: laserType.baseAmplitude,
                 width: laserType.baseWidth,
                 fireRate: laserType.baseFireRate,
-                strength: LASER_BASE_STRENGTH,
+                strength: laserType.baseStrength ?? laserType.strength ?? LASER_BASE_STRENGTH,
                 frequencyLevel: 0,
                 amplitudeLevel: 0,
                 fireRateLevel: 0,
@@ -232,13 +255,24 @@ export class Game {
     switchLaserType(typeId) {
 
         if (!this.hasLaser) return
-        if (typeId === "plasma" && !this.plasmaUnlocked) return
         if (!LASER_TYPES[typeId]) return
+        if (!this.isLaserUnlocked(typeId)) return
 
         this.currentLaserType = typeId
         this.fireInterval = 1 / this.laserFireRate
         this.lastAutoShotTime = -Infinity
         this.lastManualShotTime = -Infinity
+
+    }
+
+    isLaserUnlocked(typeId) {
+
+        if (typeId === "simple") return true
+        if (typeId === "plasma") return this.plasmaUnlocked
+        if (typeId === "pulse") return this.pulseUnlocked
+        if (typeId === "scatter") return this.scatterUnlocked
+        if (typeId === "heavy") return this.heavyUnlocked
+        return false
 
     }
 
@@ -392,6 +426,9 @@ export class Game {
                 if (this.points < this.plasmaUnlockPoints) return
 
                 this.plasmaUnlocked = true
+                this.pulseUnlocked = true
+                this.scatterUnlocked = true
+                this.heavyUnlocked = true
                 this.floatingTexts.push(
                     new FloatingText(
                         this.gridX + this.gridWidth / 2,
@@ -411,6 +448,21 @@ export class Game {
 
             if (this.isInsideButton(mouseX, mouseY, this.plasmaLaserButton)) {
                 this.switchLaserType("plasma")
+                return
+            }
+
+            if (this.isInsideButton(mouseX, mouseY, this.pulseLaserButton)) {
+                this.switchLaserType("pulse")
+                return
+            }
+
+            if (this.isInsideButton(mouseX, mouseY, this.scatterLaserButton)) {
+                this.switchLaserType("scatter")
+                return
+            }
+
+            if (this.isInsideButton(mouseX, mouseY, this.heavyLaserButton)) {
+                this.switchLaserType("heavy")
                 return
             }
         }
@@ -494,14 +546,82 @@ export class Game {
         if (!this.hasLaser) return
         if (this.transportAnimating) return
 
-        const phase = Math.random() * Math.PI * 2
         const laserType = LASER_TYPES[this.currentLaserType]
-        const colors = laserType.colors
-        const color = colors[Math.floor(Math.random() * colors.length)]
+        const colors = laserType.colors ?? [laserType.color ?? "#3a5cff"]
+        const basePhase = Math.random() * Math.PI * 2
+        const createLaser = (phaseOffset = 0) => {
+            const color = colors[Math.floor(Math.random() * colors.length)]
+            const laser = new Laser(this, basePhase + phaseOffset, color)
+            laser.fire()
+            this.lasers.push(laser)
+        }
 
-        const laser = new Laser(this, phase, color)
-        laser.fire()
-        this.lasers.push(laser)
+        if (this.currentLaserType === "scatter") {
+            const spacing = 8
+            const beamCount = Math.max(1, Math.floor(this.scatterBeamCount || 1))
+            const amplitude = Math.max(1, this.laserAmplitude)
+            const centerIndex = (beamCount - 1) / 2
+
+            for (let beamIndex = 0; beamIndex < beamCount; beamIndex++) {
+                const offset = (beamIndex - centerIndex) * spacing
+                const normalized = Math.max(-1, Math.min(1, offset / amplitude))
+                const phaseOffset = Math.asin(normalized)
+                createLaser(phaseOffset)
+            }
+            return
+        }
+
+        createLaser()
+
+    }
+
+    spawnPulseShockwave(x, y, radius = 80) {
+
+        this.pulseShockwaves.push({
+            x,
+            y,
+            radius,
+            life: 0.25,
+            maxLife: 0.25
+        })
+
+    }
+
+    updatePulseShockwaves(delta) {
+
+        for (const shockwave of this.pulseShockwaves) {
+            shockwave.life -= delta
+        }
+        this.pulseShockwaves = this.pulseShockwaves.filter(shockwave => shockwave.life > 0)
+
+    }
+
+    drawPulseShockwaves(ctx) {
+
+        if (this.pulseShockwaves.length === 0) return
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
+        ctx.clip()
+
+        for (const shockwave of this.pulseShockwaves) {
+            const lifeRatio = Math.max(0, shockwave.life / shockwave.maxLife)
+            const progress = 1 - lifeRatio
+            const currentRadius = 10 + (shockwave.radius * progress)
+            const alpha = lifeRatio * 0.28
+
+            ctx.save()
+            ctx.globalAlpha = alpha
+            ctx.strokeStyle = "#8be8ff"
+            ctx.lineWidth = 2 + (lifeRatio * 2)
+            ctx.beginPath()
+            ctx.arc(shockwave.x, shockwave.y, currentRadius, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+        }
+
+        ctx.restore()
 
     }
 
@@ -559,12 +679,37 @@ export class Game {
         this.spawnSystem.baseSpawnRate *= WORLD_SPAWN_RATE_GROWTH
 
         this.floatingTexts.push(
-            new FloatingText(
-                this.gridX + this.gridWidth / 2,
-                this.canvas.height / 2 - 24,
-                "World " + this.worldLevel,
-                "#c6f5ff"
-            )
+            {
+                x: this.gridX + this.gridWidth / 2,
+                y: this.canvas.height / 2,
+                text: "WORLD " + this.worldLevel,
+                life: 1.2,
+                duration: 1.2,
+                driftSpeed: 18,
+                update(delta) {
+                    this.y -= this.driftSpeed * delta
+                    this.life -= delta
+                },
+                draw(ctx) {
+                    const alpha = Math.max(0, this.life / this.duration)
+
+                    ctx.save()
+                    ctx.globalAlpha = alpha
+                    ctx.textAlign = "center"
+                    ctx.textBaseline = "middle"
+                    ctx.font = "bold 52px Arial"
+                    ctx.shadowColor = "#8fdcff"
+                    ctx.shadowBlur = 26
+                    ctx.fillStyle = "#e8fbff"
+                    ctx.fillText(this.text, this.x, this.y)
+
+                    ctx.shadowBlur = 0
+                    ctx.strokeStyle = "#5eb7ff"
+                    ctx.lineWidth = 2
+                    ctx.strokeText(this.text, this.x, this.y)
+                    ctx.restore()
+                }
+            }
         )
 
     }
@@ -674,6 +819,7 @@ export class Game {
             this.gridOffset = 0
         }
         this.transportBeam.update(delta)
+        this.updatePulseShockwaves(delta)
 
         if (this.transportAnimating) {
             this.transportAnimationTime += delta
@@ -706,9 +852,10 @@ export class Game {
         this.lasers = this.lasers.filter(laser => laser.active)
 
         for (let target of this.targets) {
-
+            target.gridLeftBoundary = this.gridX
             target.update(delta) 
         }
+        this.targets = this.targets.filter(target => !target.shouldRemove)
         this.collisionSystem.check()
         this.particleSystem.update(delta)
 
@@ -761,13 +908,19 @@ export class Game {
         this.drawGrid()
         this.transportBeam.draw(this.ctx)
 
+        this.ctx.save()
+        this.ctx.beginPath()
+        this.ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
+        this.ctx.clip()
         for (let target of this.targets) {
             target.draw(this.ctx)
         }
+        this.ctx.restore()
 
         for (let laser of this.lasers) {
             laser.draw(this.ctx)
         }   
+        this.drawPulseShockwaves(this.ctx)
 
         this.particleSystem.draw(this.ctx)
 
@@ -941,6 +1094,30 @@ export class Game {
                     this.currentLaserType === "plasma" ? "Active" : "Switch",
                     true,
                     this.currentLaserType === "plasma"
+                )
+
+                this.drawPanelActionButton(
+                    this.pulseLaserButton,
+                    "Pulse Laser",
+                    this.currentLaserType === "pulse" ? "Active" : "Switch",
+                    true,
+                    this.currentLaserType === "pulse"
+                )
+
+                this.drawPanelActionButton(
+                    this.scatterLaserButton,
+                    "Scatter Laser",
+                    this.currentLaserType === "scatter" ? "Active" : "Switch",
+                    true,
+                    this.currentLaserType === "scatter"
+                )
+
+                this.drawPanelActionButton(
+                    this.heavyLaserButton,
+                    "Heavy Laser",
+                    this.currentLaserType === "heavy" ? "Active" : "Switch",
+                    true,
+                    this.currentLaserType === "heavy"
                 )
 
             }

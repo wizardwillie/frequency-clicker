@@ -66,6 +66,7 @@ export class CollisionSystem {
     createReflectedLaser(sourceTarget, sourceLaser) {
 
         const startGridX = Math.max(0, Math.min(this.game.gridWidth, sourceTarget.x - this.game.gridX))
+        const reflectedTypeId = sourceLaser.laserTypeId ?? "simple"
         const reflectedLaser = {
             game: this.game,
             active: true,
@@ -76,6 +77,10 @@ export class CollisionSystem {
             amplitude: sourceLaser.amplitude,
             width: Math.max(1.5, sourceLaser.width * 0.9),
             strength: sourceLaser.strength,
+            laserTypeId: reflectedTypeId,
+            pierce: reflectedTypeId === "heavy" ? 3 : 0,
+            remainingPierce: reflectedTypeId === "heavy" ? 3 : 0,
+            piercedTargets: reflectedTypeId === "heavy" ? new WeakSet() : null,
             phase: sourceLaser.phase + ((Math.random() - 0.5) * Math.PI),
             color: "#9df4ff",
             update(delta) {
@@ -122,6 +127,118 @@ export class CollisionSystem {
         }
 
         return reflectedLaser
+
+    }
+
+    consumeHeavyPierce(laser, target) {
+
+        if (laser.laserTypeId !== "heavy") return
+
+        if (laser.remainingPierce == null) {
+            laser.remainingPierce = Math.max(0, laser.pierce ?? 3)
+        }
+        if (!laser.piercedTargets) {
+            laser.piercedTargets = new WeakSet()
+        }
+        if (laser.piercedTargets.has(target)) return
+
+        laser.piercedTargets.add(target)
+        laser.remainingPierce -= 1
+
+        if (laser.remainingPierce <= 0) {
+            laser.active = false
+        }
+
+    }
+
+    getRewardColor(targetType) {
+
+        if (targetType === "armored") return "#8fff8f"
+        if (targetType === "reinforced") return "#f08bff"
+        if (targetType === "heavy") return "#ff7a7a"
+        if (targetType === "shielded") return "#8bc7ff"
+        if (targetType === "reflector") return "#8cefff"
+        if (targetType === "splitter") return "#ffd085"
+        if (targetType === "swarm") return "#ffc284"
+        if (targetType === "boss") return "#ff4a4a"
+        if (targetType === "highValue") return "#ffd24a"
+        if (targetType === "fast") return "#ffad66"
+        return "#ffffff"
+
+    }
+
+    destroyTarget(targets, targetIndex, sourceLaser, options = {}) {
+
+        const target = targets[targetIndex]
+
+        if (!target) return
+
+        if (target.type === "splitter") {
+            this.spawnSplitterFragments(target)
+        }
+
+        if (target.type === "boss") {
+            this.spawnBossDeathBurst(target)
+        } else {
+            this.spawnExplosionParticles(target.x, target.y, 12, "#ffb84d")
+        }
+
+        const transportChargeGain = target.type === "boss"
+            ? TRANSPORT_BOSS_CHARGE_BONUS
+            : TRANSPORT_CHARGE_PER_KILL
+        this.game.addTransportCharge(transportChargeGain)
+
+        this.game.points += target.value
+        const overchargeGain = target.type === "boss" ? 10 : 2
+        this.game.laserOvercharge = Math.min(
+            this.game.maxLaserOvercharge,
+            this.game.laserOvercharge + overchargeGain
+        )
+
+        this.game.floatingTexts.push(
+            new FloatingText(
+                target.x + (Math.random() - 0.5) * 12,
+                target.y + (Math.random() - 0.5) * 12,
+                "+" + target.value,
+                this.getRewardColor(target.type)
+            )
+        )
+
+        const deathX = target.x
+        const deathY = target.y
+        targets.splice(targetIndex, 1)
+
+        if (options.allowPulseShockwave !== false && sourceLaser?.laserTypeId === "pulse") {
+            this.triggerPulseShockwave(deathX, deathY, targets, sourceLaser)
+        }
+
+    }
+
+    triggerPulseShockwave(centerX, centerY, targets, sourceLaser) {
+
+        const shockwaveRadius = 80
+        const shockwaveDamage = 1
+        const radiusSquared = shockwaveRadius * shockwaveRadius
+
+        if (typeof this.game.spawnPulseShockwave === "function") {
+            this.game.spawnPulseShockwave(centerX, centerY, shockwaveRadius)
+        }
+
+        for (let i = targets.length - 1; i >= 0; i--) {
+            const target = targets[i]
+            const dx = target.x - centerX
+            const dy = target.y - centerY
+
+            if ((dx * dx) + (dy * dy) > radiusSquared) continue
+
+            target.hitFlashTime = target.hitFlashDuration
+            target.health -= shockwaveDamage
+            this.spawnExplosionParticles(target.x, target.y, 2, "#8be8ff")
+
+            if (target.health <= 0) {
+                this.destroyTarget(targets, i, sourceLaser, { allowPulseShockwave: false })
+            }
+        }
 
     }
 
@@ -234,65 +351,17 @@ export class CollisionSystem {
                     const damage = Math.max(1, (laser.strength || 1) * overchargeBonus)
                     target.hitFlashTime = target.hitFlashDuration
                     target.health -= damage
+                    this.consumeHeavyPierce(laser, target)
                     this.spawnExplosionParticles(target.x, target.y, 3, "#ffb84d")
 
                     if (target.health > 0) {
+                        if (!laser.active) break
                         continue
                     }
 
-                    if (target.type === "splitter") {
-                        this.spawnSplitterFragments(target)
-                    }
+                    this.destroyTarget(targets, i, laser)
 
-                    if (target.type === "boss") {
-                        this.spawnBossDeathBurst(target)
-                    } else {
-                        this.spawnExplosionParticles(target.x, target.y, 12, "#ffb84d")
-                    }
-
-                    const transportChargeGain = target.type === "boss"
-                        ? TRANSPORT_BOSS_CHARGE_BONUS
-                        : TRANSPORT_CHARGE_PER_KILL
-                    this.game.addTransportCharge(transportChargeGain)
-
-                    this.game.points += target.value
-                    const overchargeGain = target.type === "boss" ? 10 : 2
-                    this.game.laserOvercharge = Math.min(
-                        this.game.maxLaserOvercharge,
-                        this.game.laserOvercharge + overchargeGain
-                    )
-                    const rewardColor =
-                        target.type === "armored"
-                            ? "#8fff8f"
-                            : target.type === "reinforced"
-                                ? "#f08bff"
-                                : target.type === "heavy"
-                                    ? "#ff7a7a"
-                                    : target.type === "shielded"
-                                        ? "#8bc7ff"
-                                        : target.type === "reflector"
-                                            ? "#8cefff"
-                                            : target.type === "splitter"
-                                                ? "#ffd085"
-                                                : target.type === "swarm"
-                                                    ? "#ffc284"
-                                                    : target.type === "boss"
-                                                        ? "#ff4a4a"
-                                        : target.type === "highValue"
-                                            ? "#ffd24a"
-                                            : target.type === "fast"
-                                                ? "#ffad66"
-                                                : "#ffffff"
-
-                    this.game.floatingTexts.push(
-                        new FloatingText(
-                        target.x + (Math.random() - 0.5) * 12,
-                        target.y + (Math.random() - 0.5) * 12,
-                        "+" + target.value,
-                        rewardColor
-                        )
-                    )    
-                    targets.splice(i, 1)
+                    if (!laser.active) break
 
                 }
 

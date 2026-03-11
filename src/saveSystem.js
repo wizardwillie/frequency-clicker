@@ -1,6 +1,10 @@
 import {
     CLICK_UPGRADE_STEP,
-    DEV_STARTING_POINTS
+    DEV_STARTING_POINTS,
+    TARGET_BASE_SPAWN_RATE,
+    WORLD_START_LEVEL,
+    WORLD_SPAWN_RATE_GROWTH,
+    TRANSPORT_INITIAL_CHARGE_REQUIRED
 } from "./constants.js"
 import { LASER_TYPES } from "./laserTypes.js"
 
@@ -25,7 +29,13 @@ export class SaveSystem {
             points: this.game.points,
             hasLaser: this.game.hasLaser,
             plasmaUnlocked: this.game.plasmaUnlocked,
+            pulseUnlocked: this.game.pulseUnlocked,
+            scatterUnlocked: this.game.scatterUnlocked,
+            heavyUnlocked: this.game.heavyUnlocked,
             currentLaserType: this.game.currentLaserType,
+            worldLevel: this.game.worldLevel,
+            transportCharge: this.game.transportCharge,
+            transportChargeRequired: this.game.transportChargeRequired,
             autoFire: {
                 unlocked: this.game.autoFireUnlocked,
                 enabled: this.game.autoFireEnabled
@@ -84,11 +94,44 @@ export class SaveSystem {
 
             this.game.hasLaser = Boolean(saveData.hasLaser ?? false)
             this.game.plasmaUnlocked = Boolean(saveData.plasmaUnlocked ?? false)
+            this.game.pulseUnlocked = Boolean(saveData.pulseUnlocked ?? this.game.plasmaUnlocked)
+            this.game.scatterUnlocked = Boolean(saveData.scatterUnlocked ?? this.game.plasmaUnlocked)
+            this.game.heavyUnlocked = Boolean(saveData.heavyUnlocked ?? this.game.plasmaUnlocked)
             this.game.autoFireUnlocked = Boolean(saveData.autoFire?.unlocked ?? false)
             this.game.autoFireEnabled = Boolean(saveData.autoFire?.enabled ?? false)
+            this.game.worldLevel = Math.max(
+                WORLD_START_LEVEL,
+                this.readNumber(saveData.worldLevel, WORLD_START_LEVEL)
+            )
+            this.game.transportChargeRequired = Math.max(
+                1,
+                this.readNumber(saveData.transportChargeRequired, TRANSPORT_INITIAL_CHARGE_REQUIRED)
+            )
+            this.game.transportCharge = Math.max(
+                0,
+                this.readNumber(saveData.transportCharge, 0)
+            )
+            this.game.transportCharge = Math.min(
+                this.game.transportCharge,
+                this.game.transportChargeRequired
+            )
+            this.game.transportReady = this.game.transportCharge >= this.game.transportChargeRequired
+            this.game.transportAnimating = false
+            this.game.transportAnimationTime = 0
+            this.game.spawnSystem.baseSpawnRate =
+                TARGET_BASE_SPAWN_RATE *
+                Math.pow(
+                    WORLD_SPAWN_RATE_GROWTH,
+                    Math.max(0, this.game.worldLevel - WORLD_START_LEVEL)
+                )
 
-            if (LASER_TYPES[saveData.currentLaserType]) {
+            if (
+                LASER_TYPES[saveData.currentLaserType] &&
+                this.game.isLaserUnlocked(saveData.currentLaserType)
+            ) {
                 this.game.currentLaserType = saveData.currentLaserType
+            } else {
+                this.game.currentLaserType = "simple"
             }
 
             const legacyUpgradeLevels = {
@@ -126,7 +169,17 @@ export class SaveSystem {
 
             this.game.hasLaser = false
             this.game.plasmaUnlocked = false
+            this.game.pulseUnlocked = false
+            this.game.scatterUnlocked = false
+            this.game.heavyUnlocked = false
             this.game.currentLaserType = "simple"
+            this.game.worldLevel = WORLD_START_LEVEL
+            this.game.transportCharge = 0
+            this.game.transportChargeRequired = TRANSPORT_INITIAL_CHARGE_REQUIRED
+            this.game.transportReady = false
+            this.game.transportAnimating = false
+            this.game.transportAnimationTime = 0
+            this.game.spawnSystem.baseSpawnRate = TARGET_BASE_SPAWN_RATE
 
             this.game.autoFireUnlocked = false
             this.game.autoFireEnabled = false

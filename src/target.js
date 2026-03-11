@@ -11,7 +11,14 @@ export class Target {
         this.type = options.type || "basic"
         this.value = value
         this.maxHealth = options.maxHealth ?? 1
-        this.health = options.health ?? this.maxHealth
+        this.phaseTimer = options.phaseTimer ?? 0
+        this.phaseDuration = options.phaseDuration ?? 2.2
+        this.isPhased = options.isPhased ?? false
+        this.chargeTimer = options.chargeTimer ?? 0
+        this.chargeCooldown = options.chargeCooldown ?? 2.8
+        this.chargeBurstDuration = options.chargeBurstDuration ?? 0.45
+        this.chargeBurstTime = options.chargeBurstTime ?? 0
+        this.chargeSpeedMultiplier = options.chargeSpeedMultiplier ?? 3
         this.hasShield = options.hasShield ?? false
         const defaultRadiusByType = {
             armored: 18,
@@ -22,10 +29,25 @@ export class Target {
             splitter: 20,
             swarm: 6,
             boss: 48,
-            fast: 10
+            fast: 10,
+            phase: 16,
+            charger: 19
         }
         const defaultRadius = defaultRadiusByType[this.type] ?? 14
         this.radius = options.radius ?? defaultRadius
+        this.gridLeftBoundary = options.gridLeftBoundary ?? 300
+        this.shouldRemove = false
+        this._health = options.health ?? this.maxHealth
+        Object.defineProperty(this, "health", {
+            get: () => this._health,
+            set: (value) => {
+                const nextHealth = Math.max(0, value)
+                if (this.type === "phase" && this.isPhased && nextHealth < this._health) {
+                    return
+                }
+                this._health = nextHealth
+            }
+        })
         this.hitFlashDuration = 0.12
         this.hitFlashTime = 0
         this.pulseTime = Math.random() * Math.PI * 2
@@ -33,8 +55,33 @@ export class Target {
 
     update(delta) {
 
-        this.x += this.speed * this.direction * delta
         this.pulseTime += delta * 3
+
+        let moveSpeed = this.speed
+
+        if (this.type === "phase") {
+            this.phaseTimer += delta
+            if (this.phaseTimer >= this.phaseDuration) {
+                this.phaseTimer -= this.phaseDuration
+                this.isPhased = !this.isPhased
+            }
+        } else if (this.type === "charger") {
+            this.chargeTimer += delta
+            if (this.chargeTimer >= this.chargeCooldown) {
+                this.chargeTimer -= this.chargeCooldown
+                this.chargeBurstTime = this.chargeBurstDuration
+            }
+
+            if (this.chargeBurstTime > 0) {
+                this.chargeBurstTime = Math.max(0, this.chargeBurstTime - delta)
+                moveSpeed *= this.chargeSpeedMultiplier
+            }
+        }
+
+        this.x += moveSpeed * this.direction * delta
+        if (this.direction < 0 && this.x + this.radius < this.gridLeftBoundary) {
+            this.shouldRemove = true
+        }
 
         if (this.hitFlashTime > 0) {
             this.hitFlashTime = Math.max(0, this.hitFlashTime - delta)
@@ -51,6 +98,12 @@ export class Target {
         let healthBarBackground = "#273127"
         let healthBarFill = "#8fff8f"
         let drawStroke = false
+        let baseAlpha = 1
+        const chargerWarningWindow = 0.4
+        const isChargerWarning =
+            this.type === "charger" &&
+            this.chargeBurstTime <= 0 &&
+            this.chargeTimer > Math.max(0, this.chargeCooldown - chargerWarningWindow)
 
         if (this.type === "armored") {
             fillColor = "#56d17e"
@@ -118,6 +171,30 @@ export class Target {
             strokeWidth = 2
             coreColor = "#ffd0a1"
             drawStroke = true
+        } else if (this.type === "phase") {
+            fillColor = "#9868ff"
+            strokeColor = "#3d268a"
+            strokeWidth = 3
+            coreColor = "#d9c8ff"
+            healthBarBackground = "#211835"
+            healthBarFill = "#b99eff"
+            drawStroke = true
+            if (this.isPhased) {
+                const flicker = 0.35 + Math.sin(this.pulseTime * 24) * 0.1
+                baseAlpha = Math.max(0.25, Math.min(0.45, flicker))
+            }
+        } else if (this.type === "charger") {
+            fillColor = this.chargeBurstTime > 0
+                ? "#ff9e57"
+                : isChargerWarning
+                    ? "#ffd47a"
+                    : "#ff6942"
+            strokeColor = isChargerWarning ? "#8a6431" : "#6e2314"
+            strokeWidth = 3
+            coreColor = isChargerWarning ? "#fff0c6" : "#ffd6b5"
+            healthBarBackground = "#311710"
+            healthBarFill = "#ff9e74"
+            drawStroke = true
         } else if (this.type === "highValue") {
             fillColor = "#ffd24a"
             strokeColor = "#a68726"
@@ -142,13 +219,20 @@ export class Target {
             fillColor = "#a81e2f"
         } else if (this.hitFlashTime > 0 && this.type === "fast") {
             fillColor = "#ffbd85"
+        } else if (this.hitFlashTime > 0 && this.type === "phase") {
+            fillColor = "#c0a6ff"
+        } else if (this.hitFlashTime > 0 && this.type === "charger") {
+            fillColor = "#ffc28f"
         }
 
         const pulse = 1 + Math.sin(this.pulseTime) * 0.05
-        const radius = this.radius * pulse
+        const warningPulse = isChargerWarning
+            ? 1 + Math.sin(this.pulseTime * 20) * 0.04
+            : 1
+        const radius = this.radius * pulse * warningPulse
 
         ctx.save()
-        ctx.globalAlpha = 0.15
+        ctx.globalAlpha = 0.15 * baseAlpha
         ctx.strokeStyle = strokeColor
         ctx.lineWidth = radius * 1.8
         ctx.beginPath()
@@ -156,6 +240,8 @@ export class Target {
         ctx.stroke()
         ctx.restore()
 
+        ctx.save()
+        ctx.globalAlpha = baseAlpha
         ctx.beginPath()
 
         ctx.arc(this.x, this.y, radius, 0, Math.PI * 2)
@@ -171,8 +257,7 @@ export class Target {
             ctx.stroke()
         }
 
-        ctx.save()
-        ctx.globalAlpha = 0.6
+        ctx.globalAlpha = 0.6 * baseAlpha
         ctx.fillStyle = coreColor
         ctx.beginPath()
         ctx.arc(this.x, this.y, radius * 0.35, 0, Math.PI * 2)
@@ -203,6 +288,40 @@ export class Target {
             ctx.lineTo(this.x - radius * 0.05, this.y + radius * 0.15)
             ctx.lineTo(this.x + radius * 0.35, this.y - radius * 0.25)
             ctx.stroke()
+        }
+
+        if (this.type === "phase" && this.isPhased) {
+            ctx.save()
+            ctx.globalAlpha = 0.35
+            ctx.strokeStyle = "#d8d0ff"
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.arc(this.x, this.y, radius + 5, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+        }
+
+        if (this.type === "charger" && this.chargeBurstTime > 0) {
+            ctx.save()
+            ctx.globalAlpha = 0.6
+            ctx.strokeStyle = "#ffd0ad"
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.moveTo(this.x - (this.direction * radius * 1.2), this.y)
+            ctx.lineTo(this.x - (this.direction * radius * 2.2), this.y)
+            ctx.stroke()
+            ctx.restore()
+        }
+
+        if (isChargerWarning) {
+            ctx.save()
+            ctx.globalAlpha = 0.45 + Math.sin(this.pulseTime * 16) * 0.15
+            ctx.strokeStyle = "#ffd47a"
+            ctx.lineWidth = 2.5
+            ctx.beginPath()
+            ctx.arc(this.x, this.y, radius + 7, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
         }
 
         if (this.maxHealth > 1) {

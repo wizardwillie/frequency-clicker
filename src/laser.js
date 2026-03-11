@@ -13,6 +13,10 @@ export class Laser {
         this.amplitude = this.game.laserAmplitude
         this.width = this.game.laserWidth
         this.strength = this.game.laserStrength
+        this.laserTypeId = this.game.currentLaserType
+        this.pierce = this.laserTypeId === "heavy" ? 3 : 0
+        this.remainingPierce = this.pierce
+        this.piercedTargets = this.pierce > 0 ? new WeakSet() : null
         const laserType = LASER_TYPES[this.game.currentLaserType]
         this.glowMultiplier = laserType?.glowMultiplier ?? 1
         this.flashMultiplier = laserType?.flashMultiplier ?? 1
