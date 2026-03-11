@@ -27,6 +27,8 @@ import {
     TRANSPORT_CHARGE_GROWTH,
     WORLD_SPAWN_RATE_GROWTH,
     WORLD_DATA,
+    WORLD_UPGRADE_TREES,
+    WORLD_MODIFIERS,
     SCATTER_BASE_BEAM_COUNT,
     HEAVY_BASE_PIERCE_COUNT,
     PULSE_SHOCKWAVE_BASE_RADIUS
@@ -59,6 +61,9 @@ export class Game {
         this.transportAnimating = false
         this.transportAnimationTime = 0
         this.transportAnimationDuration = 1.2
+        this.activeWorldModifiers = []
+        this.gravityWells = []
+        this.gravityWellTimer = 0
 
         this.lastTime = 0
         this.worldPointMultiplier = WORLD_POINT_MULTIPLIER_BASE
@@ -104,6 +109,7 @@ export class Game {
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
         this.gridOffset = 0
+        this.emitterRecoil = 0
         this.panelScroll = 0
         this.mouseX = -1
         this.mouseY = -1
@@ -377,6 +383,102 @@ export class Game {
 
     }
 
+    getWorldUpgrades() {
+
+        return WORLD_UPGRADE_TREES[this.worldLevel] || WORLD_UPGRADE_TREES[1]
+
+    }
+
+    generateWorldModifiers() {
+
+        const modifierCount = 2
+        const pool = [...WORLD_MODIFIERS]
+
+        this.activeWorldModifiers = []
+
+        for (let i = 0; i < modifierCount; i++) {
+            if (pool.length === 0) break
+            const index = Math.floor(Math.random() * pool.length)
+            this.activeWorldModifiers.push(pool.splice(index, 1)[0])
+        }
+
+    }
+
+    getRenderableLaserUpgradeEntries() {
+
+        const upgrades = this.getWorldUpgrades()
+        const activeLaserStats = this.laserTypeStats[this.currentLaserType] || {}
+        const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
+        const entries = []
+
+        for (const upgradeId of upgrades) {
+            if (
+                typeof this.upgradeSystem.hasUpgrade === "function" &&
+                !this.upgradeSystem.hasUpgrade(upgradeId)
+            ) {
+                continue
+            }
+
+            if (upgradeId === "frequency") {
+                const cost = this.upgradeSystem.getFrequencyCost()
+                entries.push({
+                    id: "frequency",
+                    button: this.frequencyButton,
+                    label: "Increase Frequency",
+                    cost,
+                    level: activeLaserStats.frequencyLevel || 0,
+                    affordable: this.points >= cost
+                })
+                continue
+            }
+
+            if (upgradeId === "amplitude") {
+                const cost = this.upgradeSystem.getAmplitudeCost()
+                entries.push({
+                    id: "amplitude",
+                    button: this.amplitudeButton,
+                    label: "Increase Amplitude",
+                    cost,
+                    level: activeLaserStats.amplitudeLevel || 0,
+                    affordable: this.points >= cost
+                })
+                continue
+            }
+
+            if (upgradeId === "fireRate") {
+                if (!this.autoFireUnlocked) {
+                    continue
+                }
+                const cost = this.upgradeSystem.getFireRateCost()
+                entries.push({
+                    id: "fireRate",
+                    button: this.fireRateButton,
+                    label: "Increase Fire Rate",
+                    cost,
+                    level: activeLaserStats.fireRateLevel || 0,
+                    affordable: this.points >= cost
+                })
+                continue
+            }
+
+            if (upgradeId === "strength") {
+                const cost = this.upgradeSystem.getStrengthCost()
+                entries.push({
+                    id: "strength",
+                    button: this.strengthButton,
+                    label: "Increase Laser Strength",
+                    cost,
+                    level: activeLaserStats.strengthLevel || 0,
+                    affordable: !strengthMaxed && this.points >= cost
+                })
+                continue
+            }
+        }
+
+        return entries
+
+    }
+
     handleClick(event) {
 
         const rect = this.canvas.getBoundingClientRect()
@@ -499,13 +601,10 @@ export class Game {
         }
 
         if (this.isPanelSectionExpanded("laserUpgrades")) {
-            buttons.push(this.frequencyButton, this.amplitudeButton)
-
-            if (this.autoFireUnlocked) {
-                buttons.push(this.fireRateButton)
+            const laserUpgradeEntries = this.getRenderableLaserUpgradeEntries()
+            for (const entry of laserUpgradeEntries) {
+                buttons.push(entry.button)
             }
-
-            buttons.push(this.strengthButton)
         }
 
         if (this.isPanelSectionExpanded("targetEconomy")) {
@@ -686,9 +785,6 @@ export class Game {
                     if (this.points < this.plasmaUnlockPoints) return
 
                     this.plasmaUnlocked = true
-                    this.pulseUnlocked = true
-                    this.scatterUnlocked = true
-                    this.heavyUnlocked = true
                     this.triggerUpgradeFlash(this.plasmaUnlockButton)
                     this.floatingTexts.push(
                         new FloatingText(
@@ -750,27 +846,14 @@ export class Game {
         }
 
         if (this.isPanelSectionExpanded("laserUpgrades")) {
-            if (this.isInsideButton(mouseX, mouseY, this.frequencyButton)) {
-                const purchased = this.upgradeSystem.buy("frequency")
-                if (purchased) this.triggerUpgradeFlash(this.frequencyButton)
-                return
-            }
+            const laserUpgradeEntries = this.getRenderableLaserUpgradeEntries()
+            for (const entry of laserUpgradeEntries) {
+                if (!this.isInsideButton(mouseX, mouseY, entry.button)) {
+                    continue
+                }
 
-            if (this.isInsideButton(mouseX, mouseY, this.amplitudeButton)) {
-                const purchased = this.upgradeSystem.buy("amplitude")
-                if (purchased) this.triggerUpgradeFlash(this.amplitudeButton)
-                return
-            }
-
-            if (this.autoFireUnlocked && this.isInsideButton(mouseX, mouseY, this.fireRateButton)) {
-                const purchased = this.upgradeSystem.buy("fireRate")
-                if (purchased) this.triggerUpgradeFlash(this.fireRateButton)
-                return
-            }
-
-            if (this.isInsideButton(mouseX, mouseY, this.strengthButton)) {
-                const purchased = this.upgradeSystem.buy("strength")
-                if (purchased) this.triggerUpgradeFlash(this.strengthButton)
+                const purchased = this.upgradeSystem.buy(entry.id)
+                if (purchased) this.triggerUpgradeFlash(entry.button)
                 return
             }
         }
@@ -929,6 +1012,7 @@ export class Game {
 
         if (!this.hasLaser) return
         if (this.transportAnimating) return
+        this.emitterRecoil = 6
 
         const laserType = LASER_TYPES[this.currentLaserType]
         const colors = laserType.colors ?? [laserType.color ?? "#3a5cff"]
@@ -1180,6 +1264,7 @@ export class Game {
         this.worldPointMultiplier *= WORLD_POINT_MULTIPLIER_GROWTH
         this.resetProgression()
         this.giveStarterLoadout(this.worldLevel)
+        this.generateWorldModifiers()
         this.transportCharge = 0
         this.transportReady = false
         this.transportChargeRequired = Math.floor(this.transportChargeRequired * TRANSPORT_CHARGE_GROWTH)
@@ -1322,13 +1407,27 @@ export class Game {
             return
         }
 
+        const hasTimeWarp =
+            this.activeWorldModifiers &&
+            this.activeWorldModifiers.includes("timeWarp")
+        let timeScale = 1
+        if (hasTimeWarp) {
+            timeScale = 0.65
+        }
+        const scaledDelta = delta * timeScale
+        this.updateGravityWells(scaledDelta)
+
         this.gridOffset += delta * 10
         if (this.gridOffset > 40) {
             this.gridOffset = 0
         }
+        this.emitterRecoil *= Math.pow(0.85, scaledDelta * 60)
+        if (this.emitterRecoil < 0.05) {
+            this.emitterRecoil = 0
+        }
         this.updateUpgradeFlashes(delta)
         this.transportBeam.update(delta)
-        this.updatePulseShockwaves(delta)
+        this.updatePulseShockwaves(scaledDelta)
 
         if (this.transportAnimating) {
             this.transportAnimationTime += delta
@@ -1356,17 +1455,18 @@ export class Game {
         this.updateAutoFire()
 
         for (let laser of this.lasers) {
-            laser.update(delta)
+            laser.update(scaledDelta)
         }
         this.lasers = this.lasers.filter(laser => laser.active)
 
         for (let target of this.targets) {
             target.gridLeftBoundary = this.gridX
-            target.update(delta) 
+            target.update(scaledDelta) 
+            this.applyGravityWellsToTarget(target, scaledDelta)
         }
         this.targets = this.targets.filter(target => !target.shouldRemove)
         this.collisionSystem.check()
-        this.particleSystem.update(delta)
+        this.particleSystem.update(scaledDelta)
 
         for (let text of this.floatingTexts) {
             text.update(delta)
@@ -1416,6 +1516,7 @@ export class Game {
         this.drawPanel()
         this.drawGrid()
         this.transportBeam.draw(this.ctx)
+        this.drawGravityWells(this.ctx)
 
         this.ctx.save()
         this.ctx.beginPath()
@@ -1441,7 +1542,8 @@ export class Game {
 
     drawLaserEmitter(ctx) {
 
-        const x = this.gridX + 20
+        const baseX = this.gridX + 20
+        const x = baseX - this.emitterRecoil
         const y = this.canvas.height / 2
         const pulse = 0.5 + Math.sin(performance.now() * 0.005) * 0.5
         const outerRadius = 18
@@ -1475,6 +1577,86 @@ export class Game {
         ctx.beginPath()
         ctx.arc(x, y, innerRadius, 0, Math.PI * 2)
         ctx.fill()
+
+        ctx.restore()
+
+    }
+
+    updateGravityWells(delta) {
+
+        const hasGravityWell =
+            this.activeWorldModifiers &&
+            this.activeWorldModifiers.includes("gravityWell")
+
+        if (!hasGravityWell) {
+            this.gravityWells = []
+            this.gravityWellTimer = 0
+            return
+        }
+
+        this.gravityWellTimer -= delta
+
+        if (this.gravityWellTimer <= 0) {
+            this.gravityWells.push({
+                x: this.gridX + Math.random() * this.gridWidth,
+                y: Math.random() * this.canvas.height,
+                radius: 160,
+                life: 6
+            })
+
+            this.gravityWellTimer = 7 + (Math.random() * 4)
+        }
+
+        for (const well of this.gravityWells) {
+            well.life -= delta
+        }
+        this.gravityWells = this.gravityWells.filter(well => well.life > 0)
+
+    }
+
+    applyGravityWellsToTarget(target, delta) {
+
+        if (!target || this.gravityWells.length === 0) return
+
+        for (const well of this.gravityWells) {
+            const dx = well.x - target.x
+            const dy = well.y - target.y
+            const dist = Math.sqrt((dx * dx) + (dy * dy))
+
+            if (dist <= 0 || dist >= well.radius) continue
+
+            const strength = (1 - (dist / well.radius)) * 60
+            target.x += (dx / dist) * strength * delta
+            target.y += (dy / dist) * strength * delta
+        }
+
+    }
+
+    drawGravityWells(ctx) {
+
+        if (this.gravityWells.length === 0) return
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
+        ctx.clip()
+
+        for (const well of this.gravityWells) {
+            const lifeRatio = Math.max(0, Math.min(1, well.life / 6))
+            const coreRadius = well.radius * 0.5
+
+            ctx.globalAlpha = 0.25 * lifeRatio
+            ctx.strokeStyle = "#9b5cff"
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.arc(well.x, well.y, coreRadius, 0, Math.PI * 2)
+            ctx.stroke()
+
+            ctx.globalAlpha = 0.12 * lifeRatio
+            ctx.beginPath()
+            ctx.arc(well.x, well.y, coreRadius * 0.62, 0, Math.PI * 2)
+            ctx.stroke()
+        }
 
         ctx.restore()
 
@@ -1536,6 +1718,16 @@ export class Game {
         ctx.beginPath()
         ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
         ctx.clip()
+
+        const hasTimeWarp =
+            this.activeWorldModifiers &&
+            this.activeWorldModifiers.includes("timeWarp")
+        if (hasTimeWarp) {
+            ctx.globalAlpha = 0.05
+            ctx.fillStyle = "#9b5cff"
+            ctx.fillRect(this.gridX, 0, this.gridWidth, this.canvas.height)
+            ctx.globalAlpha = 1
+        }
 
         const gridColor = this.getCurrentWorldConfig().gridColor
         ctx.strokeStyle = gridColor
@@ -1642,13 +1834,6 @@ export class Game {
                 return contentY + this.unlockButton.height + cardSpacing
             }
 
-            if (!isLayoutOnly) {
-                this.ctx.fillStyle = "#333"
-                this.ctx.font = "16px Arial"
-                this.ctx.fillText("Active: " + LASER_TYPES[this.currentLaserType].name, sectionX, contentY + 14)
-            }
-            contentY += 24
-
             if (!this.plasmaUnlocked) {
                 this.plasmaUnlockButton.y = contentY
 
@@ -1732,64 +1917,23 @@ export class Game {
         }
 
         if (sectionId === "laserUpgrades") {
-            const activeLaserStats = this.laserTypeStats[this.currentLaserType]
-            const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
+            const laserUpgradeEntries = this.getRenderableLaserUpgradeEntries()
 
-            this.frequencyButton.y = contentY
-            if (!isLayoutOnly) {
-                const frequencyCost = this.upgradeSystem.getFrequencyCost()
-                this.drawPanelButton(
-                    this.frequencyButton,
-                    "Increase Frequency",
-                    frequencyCost,
-                    activeLaserStats.frequencyLevel,
-                    this.points >= frequencyCost
-                )
-            }
-            contentY += this.frequencyButton.height + cardSpacing
+            for (const entry of laserUpgradeEntries) {
+                entry.button.y = contentY
 
-            this.amplitudeButton.y = contentY
-            if (!isLayoutOnly) {
-                const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
-                this.drawPanelButton(
-                    this.amplitudeButton,
-                    "Increase Amplitude",
-                    amplitudeCost,
-                    activeLaserStats.amplitudeLevel,
-                    this.points >= amplitudeCost
-                )
-            }
-            contentY += this.amplitudeButton.height + cardSpacing
-
-            if (this.autoFireUnlocked) {
-                this.fireRateButton.y = contentY
                 if (!isLayoutOnly) {
-                    const fireRateCost = this.upgradeSystem.getFireRateCost()
                     this.drawPanelButton(
-                        this.fireRateButton,
-                        "Increase Fire Rate",
-                        fireRateCost,
-                        activeLaserStats.fireRateLevel,
-                        this.points >= fireRateCost
+                        entry.button,
+                        entry.label,
+                        entry.cost,
+                        entry.level,
+                        entry.affordable
                     )
                 }
-                contentY += this.fireRateButton.height + cardSpacing
-            } else {
-                this.fireRateButton.y = contentY
-            }
 
-            this.strengthButton.y = contentY
-            if (!isLayoutOnly) {
-                const strengthCost = this.upgradeSystem.getStrengthCost()
-                this.drawPanelButton(
-                    this.strengthButton,
-                    "Increase Laser Strength",
-                    strengthCost,
-                    activeLaserStats.strengthLevel,
-                    !strengthMaxed && this.points >= strengthCost
-                )
+                contentY += entry.button.height + cardSpacing
             }
-            contentY += this.strengthButton.height + cardSpacing
 
             return contentY
         }
@@ -1878,9 +2022,16 @@ export class Game {
 
         if (sectionId === "world") {
             this.worldSectionY = y
+            const statusY = contentY + 62
+            const modifiersLabelY = contentY + 88
+            const modifierLineHeight = 18
+            const modifierEntries = this.activeWorldModifiers.length > 0
+                ? this.activeWorldModifiers
+                : ["none"]
+            const modifiersStartY = modifiersLabelY + 20
 
             if (!isLayoutOnly) {
-                this.ctx.fillStyle = "#1f1f1f"
+                this.ctx.fillStyle = "rgba(255,255,255,0.75)"
                 this.ctx.font = "16px Arial"
                 this.ctx.fillText("World Level: " + this.worldLevel, sectionX, contentY + 16)
                 this.ctx.fillText(
@@ -1892,15 +2043,28 @@ export class Game {
                 if (this.transportAnimating) {
                     this.ctx.fillStyle = "#6d5fbf"
                     this.ctx.font = "bold 16px Arial"
-                    this.ctx.fillText("TRANSPORTING...", sectionX, contentY + 62)
+                    this.ctx.fillText("TRANSPORTING...", sectionX, statusY)
                 } else if (this.transportReady) {
                     this.ctx.fillStyle = "#0f6a7a"
                     this.ctx.font = "bold 16px Arial"
-                    this.ctx.fillText("ACTIVATE TRANSPORT BEAM", sectionX, contentY + 62)
+                    this.ctx.fillText("ACTIVATE TRANSPORT BEAM", sectionX, statusY)
+                }
+
+                this.ctx.fillStyle = "rgba(255,255,255,0.75)"
+                this.ctx.font = "14px Arial"
+                this.ctx.fillText("Modifiers:", sectionX, modifiersLabelY)
+
+                this.ctx.font = "13px Arial"
+                for (let i = 0; i < modifierEntries.length; i++) {
+                    this.ctx.fillText(
+                        modifierEntries[i],
+                        sectionX + 10,
+                        modifiersStartY + (i * modifierLineHeight)
+                    )
                 }
             }
 
-            return contentY + 80 + cardSpacing
+            return modifiersStartY + (modifierEntries.length * modifierLineHeight) + cardSpacing
         }
 
         return contentY + cardSpacing
@@ -2349,8 +2513,13 @@ export class Game {
         const costY = y + height - 12
         const titleText = String(title).toUpperCase()
         const costText = String(cost || "")
+        const titleColor = selected
+            ? "#9b5cff"
+            : unlocked
+                ? "#3a86ff"
+                : "rgba(255,255,255,0.9)"
 
-        ctx.fillStyle = "#ffffff"
+        ctx.fillStyle = titleColor
         ctx.font = "700 12px Arial"
         ctx.textAlign = "left"
         ctx.textBaseline = "top"
@@ -2402,9 +2571,11 @@ export class Game {
         const hovered = this.isCardHovered(button)
         const flashIntensity = this.getCardFlashIntensity(button)
         const iconId = this.resolveActionCardIconId(title)
-        const costText = typeof subtitle === "number"
-            ? "Cost: " + subtitle
-            : subtitle || (active ? "ONLINE" : "")
+        const costText = isSwitchCard
+            ? ""
+            : typeof subtitle === "number"
+                ? "Cost: " + subtitle
+                : subtitle || (active ? "ONLINE" : "")
         const state = {
             title,
             cost: costText,

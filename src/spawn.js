@@ -83,6 +83,9 @@ export class SpawnSystem {
     update(delta) {
 
         this.spawnTimer += delta
+        const hasDoubleTargets =
+            this.game.activeWorldModifiers &&
+            this.game.activeWorldModifiers.includes("doubleTargets")
         const spawnRateMultiplier = this.game.targetUpgradeSystem
             ? this.game.targetUpgradeSystem.getSpawnRateMultiplier()
             : 1
@@ -95,10 +98,25 @@ export class SpawnSystem {
                 break
             }
 
-            const result = this.spawnTarget()
+            let spawnedBoss = false
+            const spawnCount = hasDoubleTargets ? 2 : 1
+
+            for (let i = 0; i < spawnCount; i++) {
+                if (this.game.targets.length >= MAX_ACTIVE_TARGETS) {
+                    break
+                }
+
+                const result = this.spawnTarget()
+
+                if (result.spawnedBoss) {
+                    spawnedBoss = true
+                    break
+                }
+            }
+
             this.spawnTimer -= spawnInterval
 
-            if (result.spawnedBoss) {
+            if (spawnedBoss) {
                 break
             }
         }

@@ -7,6 +7,7 @@ export class Target {
 
         this.direction = direction
         this.speed = speed
+        this.game = options.game ?? null
 
         this.type = options.type || "basic"
         this.value = value
@@ -57,6 +58,10 @@ export class Target {
 
         this.pulseTime += delta * 3
 
+        if (!this.game && typeof window !== "undefined") {
+            this.game = window.game || window.__frequencyLaserClickerGame || null
+        }
+
         let moveSpeed = this.speed
 
         if (this.type === "phase") {
@@ -79,6 +84,28 @@ export class Target {
         }
 
         this.x += moveSpeed * this.direction * delta
+        const hasMagneticTargets =
+            this.game &&
+            this.game.activeWorldModifiers &&
+            this.game.activeWorldModifiers.includes("magneticTargets")
+
+        if (hasMagneticTargets) {
+            const emitterX = this.game.gridX + 20
+            const emitterY = this.game.canvas.height / 2
+            const dx = emitterX - this.x
+            const dy = emitterY - this.y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+
+            if (dist > 0) {
+                this.x += (dx / dist) * 15 * delta
+                this.y += (dy / dist) * 15 * delta
+            }
+
+            if (this.x < emitterX + 10) {
+                this.x = emitterX + 10
+            }
+        }
+
         if (this.direction < 0 && this.x + this.radius < this.gridLeftBoundary) {
             this.shouldRemove = true
         }

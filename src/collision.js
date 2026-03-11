@@ -63,6 +63,48 @@ export class CollisionSystem {
 
     }
 
+    spawnSplitFragments(originTarget, targets = this.game.targets) {
+
+        if (!originTarget || !Array.isArray(targets)) return
+        if (originTarget.type === "fragment") return
+
+        const fragmentCount = 2
+        const offset = 10
+        const fragmentRadius = Math.max(8, Math.round((originTarget.radius ?? 14) * 0.75))
+        const fragmentHealth = Math.max(1, Math.round((originTarget.maxHealth ?? 1) * 0.5))
+        const fragmentValue = Math.max(1, Math.round((originTarget.value ?? 1) * 0.5))
+        const fragmentSpeed = (originTarget.speed ?? 100) * 1.2
+        const fragmentDirection = originTarget.direction ?? 1
+        const minX = this.game.gridX + fragmentRadius
+        const maxX = this.game.canvas.width - fragmentRadius
+        const minY = fragmentRadius
+        const maxY = this.game.canvas.height - fragmentRadius
+
+        for (let i = 0; i < fragmentCount; i++) {
+            if (targets.length >= MAX_ACTIVE_TARGETS) break
+
+            const fragmentX = originTarget.x + offset
+            const fragmentY = originTarget.y + (i === 0 ? -offset : offset)
+
+            const fragment = new Target(
+                Math.max(minX, Math.min(maxX, fragmentX)),
+                Math.max(minY, Math.min(maxY, fragmentY)),
+                fragmentDirection,
+                fragmentSpeed,
+                fragmentValue,
+                {
+                    type: "fragment",
+                    maxHealth: fragmentHealth,
+                    radius: fragmentRadius
+                }
+            )
+
+            targets.push(fragment)
+            this.spawnExplosionParticles(fragment.x, fragment.y, 3, "#ffd085")
+        }
+
+    }
+
     createReflectedLaser(sourceTarget, sourceLaser) {
 
         const startGridX = Math.max(0, Math.min(this.game.gridWidth, sourceTarget.x - this.game.gridX))
@@ -151,6 +193,42 @@ export class CollisionSystem {
 
     }
 
+    getLaserHitTargets(laser) {
+
+        if (!laser) return null
+        if (!laser.hitTargets) {
+            laser.hitTargets = new WeakSet()
+        }
+
+        return laser.hitTargets
+
+    }
+
+    markLaserTargetHit(laser, target) {
+
+        const hitTargets = this.getLaserHitTargets(laser)
+        if (!hitTargets || !target) return
+        hitTargets.add(target)
+
+    }
+
+    hasLaserHitTarget(laser, target) {
+
+        if (!laser || !target) return false
+
+        const hitTargets = laser.hitTargets
+        if (hitTargets && hitTargets.has(target)) {
+            return true
+        }
+
+        if (laser.piercedTargets && laser.piercedTargets.has(target)) {
+            return true
+        }
+
+        return false
+
+    }
+
     getRewardColor(targetType) {
 
         if (targetType === "armored") return "#8fff8f"
@@ -208,8 +286,75 @@ export class CollisionSystem {
         const deathY = target.y
         targets.splice(targetIndex, 1)
 
+        const hasLaserChain =
+            this.game.activeWorldModifiers &&
+            this.game.activeWorldModifiers.includes("laserChain")
+        const hasSplitOnDeath =
+            this.game.activeWorldModifiers &&
+            this.game.activeWorldModifiers.includes("splitOnDeath")
+
+        if (hasSplitOnDeath) {
+            this.spawnSplitFragments(target, targets)
+        }
+
+        if (hasLaserChain && sourceLaser) {
+            this.triggerLaserChain(target, sourceLaser, targets)
+        }
+
         if (options.allowPulseShockwave !== false && sourceLaser?.laserTypeId === "pulse") {
             this.triggerPulseShockwave(deathX, deathY, targets, sourceLaser)
+        }
+
+    }
+
+    triggerLaserChain(originTarget, sourceLaser, targets = this.game.targets) {
+
+        if (!originTarget || !sourceLaser || !Array.isArray(targets)) return
+
+        if (!Number.isFinite(sourceLaser.chainCount)) {
+            sourceLaser.chainCount = 0
+        }
+        if (sourceLaser.chainCount >= 2) {
+            return
+        }
+
+        const chainRadius = 120
+        const chainRadiusSquared = chainRadius * chainRadius
+        let closestTarget = null
+        let closestDistanceSquared = Infinity
+
+        for (const target of targets) {
+            if (!target || target === originTarget) continue
+            if (this.hasLaserHitTarget(sourceLaser, target)) continue
+
+            const dx = target.x - originTarget.x
+            const dy = target.y - originTarget.y
+            const distanceSquared = (dx * dx) + (dy * dy)
+
+            if (distanceSquared > chainRadiusSquared) continue
+            if (distanceSquared >= closestDistanceSquared) continue
+
+            closestDistanceSquared = distanceSquared
+            closestTarget = target
+        }
+
+        if (!closestTarget) {
+            return
+        }
+
+        sourceLaser.chainCount += 1
+        this.markLaserTargetHit(sourceLaser, closestTarget)
+
+        closestTarget.hitFlashTime = closestTarget.hitFlashDuration
+        const chainDamage = Math.max(1, sourceLaser.strength || 1)
+        closestTarget.health -= chainDamage
+        this.spawnExplosionParticles(closestTarget.x, closestTarget.y, 4, "#8be8ff")
+
+        if (closestTarget.health <= 0) {
+            const chainedTargetIndex = targets.indexOf(closestTarget)
+            if (chainedTargetIndex !== -1) {
+                this.destroyTarget(targets, chainedTargetIndex, sourceLaser)
+            }
         }
 
     }
@@ -314,6 +459,7 @@ export class CollisionSystem {
                 const distance = Math.abs(target.y - waveY)
 
                 if (distance < this.hitThreshold) {
+                    this.markLaserTargetHit(laser, target)
 
                     if (target.type === "reflector") {
                         const reflectionRoll = Math.random()

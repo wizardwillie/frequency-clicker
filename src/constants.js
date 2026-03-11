@@ -8,7 +8,7 @@ export const GAME_STATE_PLAYING = "playing"
 export const WORLD_START_LEVEL = 1
 export const WORLD_POINT_MULTIPLIER_BASE = 1
 export const WORLD_POINT_MULTIPLIER_GROWTH = 1.5
-export const TRANSPORT_INITIAL_CHARGE_REQUIRED = 200
+export const TRANSPORT_INITIAL_CHARGE_REQUIRED = 10000
 export const TRANSPORT_CHARGE_PER_KILL = 1
 export const TRANSPORT_BOSS_CHARGE_BONUS = 20
 export const TRANSPORT_CHARGE_GROWTH = 2
@@ -27,6 +27,18 @@ export const WORLD_DATA = {
         targets: ["phase", "charger", "reflector", "splitter"]
     }
 }
+export const WORLD_UPGRADE_TREES = {
+    1: ["frequency", "amplitude", "fireRate", "strength"],
+    2: ["frequency", "amplitude", "fireRate", "strength"],
+    3: ["frequency", "amplitude", "fireRate", "strength"]
+}
+export const WORLD_MODIFIERS = [
+    "doubleTargets",
+    "laserChain",
+    "fastOvercharge",
+    "magneticTargets",
+    "splitOnDeath"
+]
 
 export const LASER_BASE_FREQUENCY = 0.005
 export const LASER_BASE_AMPLITUDE = 50
