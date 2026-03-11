@@ -4,6 +4,9 @@ import {
     AMPLITUDE_UPGRADE_BASE,
     FIRERATE_UPGRADE_BASE,
     LASER_STRENGTH_UPGRADE_BASE,
+    PULSE_MASTERY_UPGRADE_BASE,
+    SCATTER_MASTERY_UPGRADE_BASE,
+    HEAVY_MASTERY_UPGRADE_BASE,
     FREQUENCY_UPGRADE_STEP,
     FREQUENCY_UPGRADE_AMPLITUDE_BONUS,
     FREQUENCY_UPGRADE_WIDTH_BONUS,
@@ -11,7 +14,13 @@ import {
     AMPLITUDE_UPGRADE_STEP,
     FIRERATE_UPGRADE_STEP,
     LASER_STRENGTH_UPGRADE_STEP,
-    MAX_LASER_STRENGTH
+    MAX_LASER_STRENGTH,
+    SCATTER_BASE_BEAM_COUNT,
+    SCATTER_MASTERY_BEAM_STEP,
+    HEAVY_BASE_PIERCE_COUNT,
+    HEAVY_MASTERY_PIERCE_STEP,
+    PULSE_SHOCKWAVE_BASE_RADIUS,
+    PULSE_MASTERY_RADIUS_STEP
 } from "./constants.js"
 
 export class UpgradeSystem {
@@ -60,6 +69,24 @@ export class UpgradeSystem {
 
     }
 
+    getPulseMasteryCost() {
+
+        return this.getScaledCost(PULSE_MASTERY_UPGRADE_BASE, this.game.pulseMasteryLevel ?? 0)
+
+    }
+
+    getScatterMasteryCost() {
+
+        return this.getScaledCost(SCATTER_MASTERY_UPGRADE_BASE, this.game.scatterMasteryLevel ?? 0)
+
+    }
+
+    getHeavyMasteryCost() {
+
+        return this.getScaledCost(HEAVY_MASTERY_UPGRADE_BASE, this.game.heavyMasteryLevel ?? 0)
+
+    }
+
     buy(type) {
 
         if (type === "frequency") {
@@ -76,6 +103,18 @@ export class UpgradeSystem {
 
         if (type === "strength") {
             return this.buyStrength()
+        }
+
+        if (type === "pulseMastery") {
+            return this.buyPulseMastery()
+        }
+
+        if (type === "scatterMastery") {
+            return this.buyScatterMastery()
+        }
+
+        if (type === "heavyMastery") {
+            return this.buyHeavyMastery()
         }
 
         return false
@@ -162,6 +201,68 @@ export class UpgradeSystem {
         stats.strengthLevel += 1
         stats.strength += LASER_STRENGTH_UPGRADE_STEP
         stats.strength = Math.min(stats.strength, MAX_LASER_STRENGTH)
+
+        return true
+
+    }
+
+    refreshMasteryEffects() {
+
+        this.game.scatterBeamCount =
+            SCATTER_BASE_BEAM_COUNT +
+            ((this.game.scatterMasteryLevel ?? 0) * SCATTER_MASTERY_BEAM_STEP)
+        this.game.heavyPierceCount =
+            HEAVY_BASE_PIERCE_COUNT +
+            ((this.game.heavyMasteryLevel ?? 0) * HEAVY_MASTERY_PIERCE_STEP)
+        this.game.pulseShockwaveRadius =
+            PULSE_SHOCKWAVE_BASE_RADIUS +
+            ((this.game.pulseMasteryLevel ?? 0) * PULSE_MASTERY_RADIUS_STEP)
+
+    }
+
+    buyPulseMastery() {
+
+        if (!this.game.pulseUnlocked) return false
+
+        const cost = this.getPulseMasteryCost()
+
+        if (this.game.points < cost) return false
+
+        this.game.points -= cost
+        this.game.pulseMasteryLevel += 1
+        this.refreshMasteryEffects()
+
+        return true
+
+    }
+
+    buyScatterMastery() {
+
+        if (!this.game.scatterUnlocked) return false
+
+        const cost = this.getScatterMasteryCost()
+
+        if (this.game.points < cost) return false
+
+        this.game.points -= cost
+        this.game.scatterMasteryLevel += 1
+        this.refreshMasteryEffects()
+
+        return true
+
+    }
+
+    buyHeavyMastery() {
+
+        if (!this.game.heavyUnlocked) return false
+
+        const cost = this.getHeavyMasteryCost()
+
+        if (this.game.points < cost) return false
+
+        this.game.points -= cost
+        this.game.heavyMasteryLevel += 1
+        this.refreshMasteryEffects()
 
         return true
 

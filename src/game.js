@@ -23,7 +23,10 @@ import {
     WORLD_START_LEVEL,
     TRANSPORT_INITIAL_CHARGE_REQUIRED,
     TRANSPORT_CHARGE_GROWTH,
-    WORLD_SPAWN_RATE_GROWTH
+    WORLD_SPAWN_RATE_GROWTH,
+    SCATTER_BASE_BEAM_COUNT,
+    HEAVY_BASE_PIERCE_COUNT,
+    PULSE_SHOCKWAVE_BASE_RADIUS
 } from "./constants.js"
 
 export class Game {
@@ -69,7 +72,12 @@ export class Game {
         this.laserOvercharge = 0
         this.maxLaserOvercharge = 50
         this.overchargeDecayRate = 6
-        this.scatterBeamCount = 3
+        this.pulseMasteryLevel = 0
+        this.scatterMasteryLevel = 0
+        this.heavyMasteryLevel = 0
+        this.scatterBeamCount = SCATTER_BASE_BEAM_COUNT
+        this.heavyPierceCount = HEAVY_BASE_PIERCE_COUNT
+        this.pulseShockwaveRadius = PULSE_SHOCKWAVE_BASE_RADIUS
         this.pulseShockwaves = []
         this.autoSaveInterval = 15
         this.autoSaveTimer = 0
@@ -120,57 +128,75 @@ export class Game {
             width: this.panelWidth - 40,
             height: 42
         }
+        this.pulseMasteryButton = {
+            x: 20,
+            y: 380,
+            width: this.panelWidth - 40,
+            height: 60
+        }
+        this.scatterMasteryButton = {
+            x: 20,
+            y: 450,
+            width: this.panelWidth - 40,
+            height: 60
+        }
+        this.heavyMasteryButton = {
+            x: 20,
+            y: 520,
+            width: this.panelWidth - 40,
+            height: 60
+        }
         this.frequencyButton = {
             x: 20,
-            y: 360,
+            y: 630,
             width: this.panelWidth - 40,
             height: 72
         }
         this.amplitudeButton = {
             x: 20,
-            y: 440,
+            y: 710,
             width: this.panelWidth - 40,
             height: 72
         }
         this.fireRateButton = {
             x: 20,
-            y: 520,
+            y: 790,
             width: this.panelWidth - 40,
             height: 72
         }
         this.strengthButton = {
             x: 20,
-            y: 600,
+            y: 870,
             width: this.panelWidth - 40,
             height: 72
         }
         this.targetValueButton = {
             x: 20,
-            y: 710,
+            y: 980,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetSpawnRateButton = {
             x: 20,
-            y: 780,
+            y: 1050,
             width: this.panelWidth - 40,
             height: 60
         }
         this.targetDiversityButton = {
             x: 20,
-            y: 850,
+            y: 1120,
             width: this.panelWidth - 40,
             height: 60
         }
         this.clickDamageButton = {
             x: 20,
-            y: 920,
+            y: 1190,
             width: this.panelWidth - 40,
             height: 60
         }
         this.autoFireButton = {
             x: 20,
-            y: 1010,
+            y: 1310,
             width: this.panelWidth - 40,
             height: 30
         }
@@ -467,6 +493,21 @@ export class Game {
             }
         }
 
+        if (this.plasmaUnlocked && this.isInsideButton(mouseX, mouseY, this.pulseMasteryButton)) {
+            this.upgradeSystem.buy("pulseMastery")
+            return
+        }
+
+        if (this.plasmaUnlocked && this.isInsideButton(mouseX, mouseY, this.scatterMasteryButton)) {
+            this.upgradeSystem.buy("scatterMastery")
+            return
+        }
+
+        if (this.plasmaUnlocked && this.isInsideButton(mouseX, mouseY, this.heavyMasteryButton)) {
+            this.upgradeSystem.buy("heavyMastery")
+            return
+        }
+
         if (this.isInsideButton(mouseX, mouseY, this.frequencyButton)) {
             this.upgradeSystem.buy("frequency")
             return
@@ -552,6 +593,12 @@ export class Game {
         const createLaser = (phaseOffset = 0) => {
             const color = colors[Math.floor(Math.random() * colors.length)]
             const laser = new Laser(this, basePhase + phaseOffset, color)
+            if (this.currentLaserType === "heavy") {
+                const pierceCount = Math.max(1, Math.floor(this.heavyPierceCount || HEAVY_BASE_PIERCE_COUNT))
+                laser.pierce = pierceCount
+                laser.remainingPierce = pierceCount
+                laser.piercedTargets = new WeakSet()
+            }
             laser.fire()
             this.lasers.push(laser)
         }
@@ -577,13 +624,51 @@ export class Game {
 
     spawnPulseShockwave(x, y, radius = 80) {
 
+        const baseRadius = Math.max(0, radius)
+        const expandedRadius = Math.max(baseRadius, this.pulseShockwaveRadius || PULSE_SHOCKWAVE_BASE_RADIUS)
+
         this.pulseShockwaves.push({
             x,
             y,
-            radius,
+            radius: expandedRadius,
             life: 0.25,
             maxLife: 0.25
         })
+
+        if (expandedRadius <= baseRadius) {
+            return
+        }
+
+        const baseRadiusSquared = baseRadius * baseRadius
+        const expandedRadiusSquared = expandedRadius * expandedRadius
+        const shockwaveDamage = 1
+
+        for (let i = this.targets.length - 1; i >= 0; i--) {
+            const target = this.targets[i]
+            const dx = target.x - x
+            const dy = target.y - y
+            const distanceSquared = (dx * dx) + (dy * dy)
+
+            if (distanceSquared <= baseRadiusSquared || distanceSquared > expandedRadiusSquared) {
+                continue
+            }
+
+            target.hitFlashTime = target.hitFlashDuration
+            target.health -= shockwaveDamage
+
+            if (this.particleSystem) {
+                this.particleSystem.spawnExplosion(target.x, target.y, 2, "#8be8ff")
+            }
+
+            if (target.health <= 0 && this.collisionSystem) {
+                this.collisionSystem.destroyTarget(
+                    this.targets,
+                    i,
+                    null,
+                    { allowPulseShockwave: false }
+                )
+            }
+        }
 
     }
 
@@ -1126,12 +1211,41 @@ export class Game {
             const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
             const fireRateCost = this.upgradeSystem.getFireRateCost()
             const strengthCost = this.upgradeSystem.getStrengthCost()
+            const pulseMasteryCost = this.upgradeSystem.getPulseMasteryCost()
+            const scatterMasteryCost = this.upgradeSystem.getScatterMasteryCost()
+            const heavyMasteryCost = this.upgradeSystem.getHeavyMasteryCost()
             const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
             const activeLaserStats = this.laserTypeStats[this.currentLaserType]
             const targetValueCost = this.targetUpgradeSystem.getValueCost()
             const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
             const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
             const clickDamageCost = this.clickUpgradeSystem.getClickCost()
+
+            if (this.plasmaUnlocked) {
+                this.drawPanelSectionHeader("LASER MASTERY", 20, this.pulseMasteryButton.y - 44)
+                this.drawPanelButton(
+                    this.pulseMasteryButton,
+                    "Pulse Mastery",
+                    pulseMasteryCost,
+                    this.pulseMasteryLevel,
+                    this.points >= pulseMasteryCost
+                )
+                this.drawPanelButton(
+                    this.scatterMasteryButton,
+                    "Scatter Mastery",
+                    scatterMasteryCost,
+                    this.scatterMasteryLevel,
+                    this.points >= scatterMasteryCost
+                )
+                this.drawPanelButton(
+                    this.heavyMasteryButton,
+                    "Heavy Mastery",
+                    heavyMasteryCost,
+                    this.heavyMasteryLevel,
+                    this.points >= heavyMasteryCost
+                )
+            }
+
             this.drawPanelSectionHeader("LASER UPGRADES", 20, this.frequencyButton.y - 44)
 
             this.drawPanelButton(
