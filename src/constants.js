@@ -6,11 +6,27 @@ export const DEV_STARTING_POINTS = 1000000
 export const GAME_STATE_TITLE = "title"
 export const GAME_STATE_PLAYING = "playing"
 export const WORLD_START_LEVEL = 1
+export const WORLD_POINT_MULTIPLIER_BASE = 1
+export const WORLD_POINT_MULTIPLIER_GROWTH = 1.5
 export const TRANSPORT_INITIAL_CHARGE_REQUIRED = 200
 export const TRANSPORT_CHARGE_PER_KILL = 1
 export const TRANSPORT_BOSS_CHARGE_BONUS = 20
 export const TRANSPORT_CHARGE_GROWTH = 2
 export const WORLD_SPAWN_RATE_GROWTH = 1.35
+export const WORLD_DATA = {
+    1: {
+        name: "Neon Grid",
+        gridColor: "#2a5fff",
+        particleColor: "#00aaff",
+        targets: ["basic", "armored", "shielded", "heavy"]
+    },
+    2: {
+        name: "Plasma Storm",
+        gridColor: "#a03bff",
+        particleColor: "#ff66ff",
+        targets: ["phase", "charger", "reflector", "splitter"]
+    }
+}
 
 export const LASER_BASE_FREQUENCY = 0.005
 export const LASER_BASE_AMPLITUDE = 50

@@ -3,6 +3,7 @@ import {
     DEV_STARTING_POINTS,
     TARGET_BASE_SPAWN_RATE,
     WORLD_START_LEVEL,
+    WORLD_POINT_MULTIPLIER_BASE,
     WORLD_SPAWN_RATE_GROWTH,
     TRANSPORT_INITIAL_CHARGE_REQUIRED
 } from "./constants.js"
@@ -34,6 +35,7 @@ export class SaveSystem {
             heavyUnlocked: this.game.heavyUnlocked,
             currentLaserType: this.game.currentLaserType,
             worldLevel: this.game.worldLevel,
+            worldPointMultiplier: this.game.worldPointMultiplier,
             transportCharge: this.game.transportCharge,
             transportChargeRequired: this.game.transportChargeRequired,
             autoFire: {
@@ -80,7 +82,11 @@ export class SaveSystem {
             if (!saveData || typeof saveData !== "object") return false
             if (saveData.version !== SAVE_VERSION) return false
 
-            this.game.points = this.readNumber(saveData.points, DEV_STARTING_POINTS)
+            if (typeof this.game.setPointsRaw === "function") {
+                this.game.setPointsRaw(this.readNumber(saveData.points, DEV_STARTING_POINTS))
+            } else {
+                this.game.points = this.readNumber(saveData.points, DEV_STARTING_POINTS)
+            }
 
             this.game.clickUpgradeLevel = this.readNumber(saveData.click?.upgradeLevel, 0)
             this.game.clickDamage = this.readNumber(
@@ -102,6 +108,10 @@ export class SaveSystem {
             this.game.worldLevel = Math.max(
                 WORLD_START_LEVEL,
                 this.readNumber(saveData.worldLevel, WORLD_START_LEVEL)
+            )
+            this.game.worldPointMultiplier = Math.max(
+                WORLD_POINT_MULTIPLIER_BASE,
+                this.readNumber(saveData.worldPointMultiplier, WORLD_POINT_MULTIPLIER_BASE)
             )
             this.game.transportChargeRequired = Math.max(
                 1,
@@ -159,7 +169,11 @@ export class SaveSystem {
         try {
             localStorage.removeItem(this.saveKey)
 
-            this.game.points = DEV_STARTING_POINTS
+            if (typeof this.game.setPointsRaw === "function") {
+                this.game.setPointsRaw(DEV_STARTING_POINTS)
+            } else {
+                this.game.points = DEV_STARTING_POINTS
+            }
             this.game.clickDamage = 1
             this.game.clickUpgradeLevel = 0
 
@@ -174,6 +188,7 @@ export class SaveSystem {
             this.game.heavyUnlocked = false
             this.game.currentLaserType = "simple"
             this.game.worldLevel = WORLD_START_LEVEL
+            this.game.worldPointMultiplier = WORLD_POINT_MULTIPLIER_BASE
             this.game.transportCharge = 0
             this.game.transportChargeRequired = TRANSPORT_INITIAL_CHARGE_REQUIRED
             this.game.transportReady = false

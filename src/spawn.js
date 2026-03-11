@@ -51,7 +51,8 @@ import {
     TARGET_BOSS_SPEED_MULTIPLIER,
     TARGET_FAST_SPEED_MULTIPLIER,
     TARGET_SWARM_GROUP_SIZE,
-    MAX_ACTIVE_TARGETS
+    MAX_ACTIVE_TARGETS,
+    WORLD_DATA
 } from "./constants.js"
 
 const TARGET_PHASE_CHANCE = 0.04
@@ -175,75 +176,97 @@ export class SpawnSystem {
         const worldHealthMultiplier = 1 + (worldLevel * 0.4)
         const worldSpeedMultiplier = 1 + (worldLevel * 0.1)
         const worldValueMultiplier = 1 + (worldLevel * 0.3)
-        const worldTwoUnlocked = worldLevel >= 2
+        const worldConfig = typeof this.game.getCurrentWorldConfig === "function"
+            ? this.game.getCurrentWorldConfig()
+            : WORLD_DATA[1]
+        const allowedTargets = Array.isArray(worldConfig?.targets) && worldConfig.targets.length > 0
+            ? worldConfig.targets
+            : WORLD_DATA[1].targets
+        const isTargetAllowed = (targetType) => allowedTargets.includes(targetType)
+        const basicAllowed = isTargetAllowed("basic")
         const targetUpgrades = this.game.targetUpgradeSystem
         const diversityLevel = targetUpgrades ? targetUpgrades.diversityLevel : 0
         const weightedTypes = [
             {
                 type: "boss",
                 chance: TARGET_BOSS_CHANCE,
-                unlocked: allowBoss && diversityLevel >= TARGET_BOSS_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("boss") && allowBoss && diversityLevel >= TARGET_BOSS_UNLOCK_LEVEL
             },
             {
                 type: "heavy",
                 chance: TARGET_HEAVY_CHANCE,
-                unlocked: diversityLevel >= TARGET_HEAVY_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("heavy") && diversityLevel >= TARGET_HEAVY_UNLOCK_LEVEL
             },
             {
                 type: "phase",
                 chance: TARGET_PHASE_CHANCE,
-                unlocked: worldTwoUnlocked
+                unlocked: isTargetAllowed("phase")
             },
             {
                 type: "charger",
                 chance: TARGET_CHARGER_CHANCE,
-                unlocked: worldTwoUnlocked
+                unlocked: isTargetAllowed("charger")
             },
             {
                 type: "shielded",
                 chance: TARGET_SHIELDED_CHANCE,
-                unlocked: diversityLevel >= TARGET_SHIELDED_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("shielded") && diversityLevel >= TARGET_SHIELDED_UNLOCK_LEVEL
             },
             {
                 type: "reflector",
                 chance: TARGET_REFLECTOR_CHANCE,
-                unlocked: diversityLevel >= TARGET_REFLECTOR_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("reflector") && diversityLevel >= TARGET_REFLECTOR_UNLOCK_LEVEL
             },
             {
                 type: "reinforced",
                 chance: TARGET_REINFORCED_CHANCE,
-                unlocked: diversityLevel >= TARGET_REINFORCED_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("reinforced") && diversityLevel >= TARGET_REINFORCED_UNLOCK_LEVEL
             },
             {
                 type: "splitter",
                 chance: TARGET_SPLITTER_CHANCE,
-                unlocked: diversityLevel >= TARGET_SPLITTER_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("splitter") && diversityLevel >= TARGET_SPLITTER_UNLOCK_LEVEL
             },
             {
                 type: "swarm",
                 chance: TARGET_SWARM_CHANCE,
-                unlocked: diversityLevel >= TARGET_SWARM_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("swarm") && diversityLevel >= TARGET_SWARM_UNLOCK_LEVEL
             },
             {
                 type: "armored",
                 chance: TARGET_ARMORED_CHANCE,
-                unlocked: true
+                unlocked: isTargetAllowed("armored")
             },
             {
                 type: "highValue",
                 chance: TARGET_HIGH_VALUE_CHANCE,
-                unlocked: true
+                unlocked: isTargetAllowed("highValue")
             },
             {
                 type: "fast",
                 chance: TARGET_FAST_CHANCE,
-                unlocked: diversityLevel >= TARGET_FAST_UNLOCK_LEVEL
+                unlocked: isTargetAllowed("fast") && diversityLevel >= TARGET_FAST_UNLOCK_LEVEL
             }
         ]
-        let type = forceType || "basic"
+        let type = null
 
-        if (!forceType) {
-            const availableTypes = weightedTypes.filter(entry => entry.unlocked)
+        if (forceType && isTargetAllowed(forceType)) {
+            type = forceType
+        }
+
+        if (!type) {
+            const availableTypes = weightedTypes.filter(entry => entry.unlocked).map(entry => ({ ...entry }))
+
+            if (basicAllowed) {
+                const nonBasicTotalWeight = availableTypes.reduce((sum, entry) => sum + entry.chance, 0)
+                const basicChance = Math.max(0.01, 1 - nonBasicTotalWeight)
+                availableTypes.push({
+                    type: "basic",
+                    chance: basicChance,
+                    unlocked: true
+                })
+            }
+
             const totalWeight = availableTypes.reduce((sum, entry) => sum + entry.chance, 0)
 
             if (totalWeight > 0) {
@@ -256,6 +279,10 @@ export class SpawnSystem {
                     }
                 }
             }
+        }
+
+        if (!type) {
+            type = basicAllowed ? "basic" : (allowedTargets[0] || "basic")
         }
 
         let valueMultiplier = 1
