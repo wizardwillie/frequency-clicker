@@ -228,9 +228,11 @@ export class Game {
             x: 20,
             y: 1310,
             width: this.panelWidth - 40,
-            height: 30
+            height: 60
         }
         this.worldSectionY = this.autoFireButton.y + 76
+        this.panelHeaderButtons = []
+        this.panelContentHeight = this.canvas.height
 
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
@@ -401,10 +403,8 @@ export class Game {
 
     getPanelContentHeight() {
 
-        return Math.max(
-            this.autoFireButton.y + this.autoFireButton.height + 40,
-            this.worldSectionY + 120
-        )
+        this.preparePanelLayout(true)
+        return this.panelContentHeight
 
     }
 
@@ -589,62 +589,8 @@ export class Game {
 
     getVisiblePanelHeaderButtons() {
 
-        const headerButtons = [
-            {
-                x: 12,
-                y: this.unlockButton.y - 44,
-                width: this.panelWidth - 24,
-                height: 26,
-                sectionId: "lasers"
-            },
-            {
-                x: 12,
-                y: this.worldSectionY,
-                width: this.panelWidth - 24,
-                height: 26,
-                sectionId: "world"
-            }
-        ]
-
-        if (!this.hasLaser) {
-            return headerButtons
-        }
-
-        headerButtons.push(
-            {
-                x: 12,
-                y: this.frequencyButton.y - 44,
-                width: this.panelWidth - 24,
-                height: 26,
-                sectionId: "laserUpgrades"
-            },
-            {
-                x: 12,
-                y: this.targetValueButton.y - 44,
-                width: this.panelWidth - 24,
-                height: 26,
-                sectionId: "targetEconomy"
-            },
-            {
-                x: 12,
-                y: this.autoFireButton.y - 44,
-                width: this.panelWidth - 24,
-                height: 26,
-                sectionId: "automation"
-            }
-        )
-
-        if (this.plasmaUnlocked) {
-            headerButtons.push({
-                x: 12,
-                y: this.pulseMasteryButton.y - 44,
-                width: this.panelWidth - 24,
-                height: 26,
-                sectionId: "mastery"
-            })
-        }
-
-        return headerButtons
+        this.preparePanelLayout(true)
+        return this.panelHeaderButtons
 
     }
 
@@ -1195,11 +1141,45 @@ export class Game {
 
     }
 
+    giveStarterLoadout(worldLevel) {
+
+        if (!Number.isFinite(worldLevel)) return
+
+        this.hasLaser = true
+
+        if (worldLevel === 1) {
+            this.currentLaserType = "simple"
+            this.lastAutoShotTime = -Infinity
+            this.lastManualShotTime = -Infinity
+            this.fireInterval = 1 / this.laserFireRate
+            return
+        }
+
+        if (worldLevel === 2) {
+            this.pulseUnlocked = true
+            this.currentLaserType = "pulse"
+            this.lastAutoShotTime = -Infinity
+            this.lastManualShotTime = -Infinity
+            this.fireInterval = 1 / this.laserFireRate
+            return
+        }
+
+        if (worldLevel >= 3) {
+            this.plasmaUnlocked = true
+            this.currentLaserType = "plasma"
+            this.lastAutoShotTime = -Infinity
+            this.lastManualShotTime = -Infinity
+            this.fireInterval = 1 / this.laserFireRate
+        }
+
+    }
+
     advanceWorld() {
 
         this.worldLevel += 1
         this.worldPointMultiplier *= WORLD_POINT_MULTIPLIER_GROWTH
         this.resetProgression()
+        this.giveStarterLoadout(this.worldLevel)
         this.transportCharge = 0
         this.transportReady = false
         this.transportChargeRequired = Math.floor(this.transportChargeRequired * TRANSPORT_CHARGE_GROWTH)
@@ -1446,6 +1426,7 @@ export class Game {
         }
         this.ctx.restore()
 
+        this.drawLaserEmitter(this.ctx)
         for (let laser of this.lasers) {
             laser.draw(this.ctx)
         }   
@@ -1456,6 +1437,47 @@ export class Game {
         for (let text of this.floatingTexts) {
             text.draw(this.ctx)
         }
+    }
+
+    drawLaserEmitter(ctx) {
+
+        const x = this.gridX + 20
+        const y = this.canvas.height / 2
+        const pulse = 0.5 + Math.sin(performance.now() * 0.005) * 0.5
+        const outerRadius = 18
+        const innerRadius = 8
+        const barrelLength = 18
+        const barrelWidth = 14
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
+        ctx.clip()
+
+        // Barrel extending into the playfield.
+        ctx.fillStyle = "rgba(58,134,255,0.22)"
+        ctx.strokeStyle = "rgba(58,134,255,0.45)"
+        ctx.lineWidth = 1
+        ctx.fillRect(x + 10, y - (barrelWidth / 2), barrelLength, barrelWidth)
+        ctx.strokeRect(x + 10, y - (barrelWidth / 2), barrelLength, barrelWidth)
+
+        // Outer emitter shell.
+        ctx.shadowColor = "#3a86ff"
+        ctx.shadowBlur = 10 + (pulse * 10)
+        ctx.fillStyle = "rgba(58,134,255,0.25)"
+        ctx.beginPath()
+        ctx.arc(x, y, outerRadius, 0, Math.PI * 2)
+        ctx.fill()
+
+        // Inner energy core.
+        ctx.shadowBlur = 18 + (pulse * 18)
+        ctx.fillStyle = "#3a86ff"
+        ctx.beginPath()
+        ctx.arc(x, y, innerRadius, 0, Math.PI * 2)
+        ctx.fill()
+
+        ctx.restore()
+
     }
 
     drawTitleButton(button, label, isDanger = false) {
@@ -1542,6 +1564,349 @@ export class Game {
 
     }
 
+    preparePanelLayout(layoutOnly = false) {
+
+        const previousLayoutMode = this._panelLayoutOnly
+        this._panelLayoutOnly = layoutOnly
+        this.panelHeaderButtons = []
+
+        let y = 90
+
+        y = this.drawPanelSection("lasers", "LASERS", y)
+
+        if (this.hasLaser && this.plasmaUnlocked) {
+            y = this.drawPanelSection("mastery", "LASER MASTERY", y)
+        }
+
+        if (this.hasLaser) {
+            y = this.drawPanelSection("laserUpgrades", "LASER UPGRADES", y)
+            y = this.drawPanelSection("targetEconomy", "TARGET ECONOMY", y)
+            y = this.drawPanelSection("automation", "AUTOMATION", y)
+        }
+
+        y = this.drawPanelSection("world", "WORLD", y)
+
+        this.panelContentHeight = y + 16
+        this._panelLayoutOnly = previousLayoutMode
+
+        return y
+
+    }
+
+    drawPanelSection(sectionId, label, y) {
+
+        const headerSpacing = 28
+        const cardSpacing = 10
+        const sectionX = 20
+        const isLayoutOnly = Boolean(this._panelLayoutOnly)
+
+        this.panelHeaderButtons.push({
+            x: 12,
+            y,
+            width: this.panelWidth - 24,
+            height: 26,
+            sectionId
+        })
+
+        if (!isLayoutOnly) {
+            this.drawPanelSectionHeader(sectionId, label, sectionX, y)
+        }
+
+        let contentY = y + headerSpacing
+
+        if (!this.isPanelSectionExpanded(sectionId)) {
+            return contentY + cardSpacing
+        }
+
+        if (sectionId === "lasers") {
+            if (!this.hasLaser) {
+                this.unlockButton.y = contentY
+
+                if (!isLayoutOnly) {
+                    const button = this.unlockButton
+
+                    this.ctx.fillStyle = "#e2e2db"
+                    this.ctx.fillRect(button.x, button.y, button.width, button.height)
+
+                    this.ctx.strokeStyle = "#222"
+                    this.ctx.lineWidth = 2
+                    this.ctx.strokeRect(button.x, button.y, button.width, button.height)
+
+                    this.ctx.fillStyle = "#111"
+                    this.ctx.font = "18px Arial"
+                    this.ctx.fillText("Unlock Simple Laser", button.x + 12, button.y + 32)
+                    this.ctx.font = "16px Arial"
+                    this.ctx.fillText("Cost: " + this.simpleLaserCost, button.x + 12, button.y + 58)
+                }
+
+                return contentY + this.unlockButton.height + cardSpacing
+            }
+
+            if (!isLayoutOnly) {
+                this.ctx.fillStyle = "#333"
+                this.ctx.font = "16px Arial"
+                this.ctx.fillText("Active: " + LASER_TYPES[this.currentLaserType].name, sectionX, contentY + 14)
+            }
+            contentY += 24
+
+            if (!this.plasmaUnlocked) {
+                this.plasmaUnlockButton.y = contentY
+
+                if (!isLayoutOnly) {
+                    this.drawPanelActionButton(
+                        this.plasmaUnlockButton,
+                        "Unlock Plasma Laser",
+                        "Milestone: " + this.plasmaUnlockPoints,
+                        this.points >= this.plasmaUnlockPoints
+                    )
+                }
+
+                return contentY + this.plasmaUnlockButton.height + cardSpacing
+            }
+
+            const laserButtons = [
+                [this.simpleLaserButton, "Simple Laser", this.currentLaserType === "simple"],
+                [this.plasmaLaserButton, "Plasma Laser", this.currentLaserType === "plasma"],
+                [this.pulseLaserButton, "Pulse Laser", this.currentLaserType === "pulse"],
+                [this.scatterLaserButton, "Scatter Laser", this.currentLaserType === "scatter"],
+                [this.heavyLaserButton, "Heavy Laser", this.currentLaserType === "heavy"]
+            ]
+
+            for (const [button, title, isActive] of laserButtons) {
+                button.y = contentY
+
+                if (!isLayoutOnly) {
+                    this.drawPanelActionButton(
+                        button,
+                        title,
+                        isActive ? "Active" : "Switch",
+                        true,
+                        isActive
+                    )
+                }
+
+                contentY += button.height + cardSpacing
+            }
+
+            return contentY
+        }
+
+        if (sectionId === "mastery") {
+            this.pulseMasteryButton.y = contentY
+            if (!isLayoutOnly) {
+                this.drawPanelButton(
+                    this.pulseMasteryButton,
+                    "Pulse Mastery",
+                    this.upgradeSystem.getPulseMasteryCost(),
+                    this.pulseMasteryLevel,
+                    this.points >= this.upgradeSystem.getPulseMasteryCost()
+                )
+            }
+            contentY += this.pulseMasteryButton.height + cardSpacing
+
+            this.scatterMasteryButton.y = contentY
+            if (!isLayoutOnly) {
+                this.drawPanelButton(
+                    this.scatterMasteryButton,
+                    "Scatter Mastery",
+                    this.upgradeSystem.getScatterMasteryCost(),
+                    this.scatterMasteryLevel,
+                    this.points >= this.upgradeSystem.getScatterMasteryCost()
+                )
+            }
+            contentY += this.scatterMasteryButton.height + cardSpacing
+
+            this.heavyMasteryButton.y = contentY
+            if (!isLayoutOnly) {
+                this.drawPanelButton(
+                    this.heavyMasteryButton,
+                    "Heavy Mastery",
+                    this.upgradeSystem.getHeavyMasteryCost(),
+                    this.heavyMasteryLevel,
+                    this.points >= this.upgradeSystem.getHeavyMasteryCost()
+                )
+            }
+            contentY += this.heavyMasteryButton.height + cardSpacing
+
+            return contentY
+        }
+
+        if (sectionId === "laserUpgrades") {
+            const activeLaserStats = this.laserTypeStats[this.currentLaserType]
+            const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
+
+            this.frequencyButton.y = contentY
+            if (!isLayoutOnly) {
+                const frequencyCost = this.upgradeSystem.getFrequencyCost()
+                this.drawPanelButton(
+                    this.frequencyButton,
+                    "Increase Frequency",
+                    frequencyCost,
+                    activeLaserStats.frequencyLevel,
+                    this.points >= frequencyCost
+                )
+            }
+            contentY += this.frequencyButton.height + cardSpacing
+
+            this.amplitudeButton.y = contentY
+            if (!isLayoutOnly) {
+                const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
+                this.drawPanelButton(
+                    this.amplitudeButton,
+                    "Increase Amplitude",
+                    amplitudeCost,
+                    activeLaserStats.amplitudeLevel,
+                    this.points >= amplitudeCost
+                )
+            }
+            contentY += this.amplitudeButton.height + cardSpacing
+
+            if (this.autoFireUnlocked) {
+                this.fireRateButton.y = contentY
+                if (!isLayoutOnly) {
+                    const fireRateCost = this.upgradeSystem.getFireRateCost()
+                    this.drawPanelButton(
+                        this.fireRateButton,
+                        "Increase Fire Rate",
+                        fireRateCost,
+                        activeLaserStats.fireRateLevel,
+                        this.points >= fireRateCost
+                    )
+                }
+                contentY += this.fireRateButton.height + cardSpacing
+            } else {
+                this.fireRateButton.y = contentY
+            }
+
+            this.strengthButton.y = contentY
+            if (!isLayoutOnly) {
+                const strengthCost = this.upgradeSystem.getStrengthCost()
+                this.drawPanelButton(
+                    this.strengthButton,
+                    "Increase Laser Strength",
+                    strengthCost,
+                    activeLaserStats.strengthLevel,
+                    !strengthMaxed && this.points >= strengthCost
+                )
+            }
+            contentY += this.strengthButton.height + cardSpacing
+
+            return contentY
+        }
+
+        if (sectionId === "targetEconomy") {
+            this.targetValueButton.y = contentY
+            if (!isLayoutOnly) {
+                const targetValueCost = this.targetUpgradeSystem.getValueCost()
+                this.drawPanelButton(
+                    this.targetValueButton,
+                    "Increase Target Value",
+                    targetValueCost,
+                    this.targetUpgradeSystem.valueLevel,
+                    this.points >= targetValueCost
+                )
+            }
+            contentY += this.targetValueButton.height + cardSpacing
+
+            this.targetSpawnRateButton.y = contentY
+            if (!isLayoutOnly) {
+                const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
+                this.drawPanelButton(
+                    this.targetSpawnRateButton,
+                    "Increase Spawn Rate",
+                    targetSpawnRateCost,
+                    this.targetUpgradeSystem.spawnRateLevel,
+                    this.points >= targetSpawnRateCost
+                )
+            }
+            contentY += this.targetSpawnRateButton.height + cardSpacing
+
+            this.targetDiversityButton.y = contentY
+            if (!isLayoutOnly) {
+                const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
+                this.drawPanelButton(
+                    this.targetDiversityButton,
+                    "Increase Target Diversity",
+                    targetDiversityCost,
+                    this.targetUpgradeSystem.diversityLevel,
+                    this.points >= targetDiversityCost
+                )
+            }
+            contentY += this.targetDiversityButton.height + cardSpacing
+
+            this.clickDamageButton.y = contentY
+            if (!isLayoutOnly) {
+                const clickDamageCost = this.clickUpgradeSystem.getClickCost()
+                this.drawPanelButton(
+                    this.clickDamageButton,
+                    "Increase Click DMG (" + this.clickDamage + ")",
+                    clickDamageCost,
+                    this.clickUpgradeLevel,
+                    this.points >= clickDamageCost
+                )
+            }
+            contentY += this.clickDamageButton.height + cardSpacing
+
+            return contentY
+        }
+
+        if (sectionId === "automation") {
+            this.autoFireButton.y = contentY
+
+            if (!isLayoutOnly) {
+                if (!this.autoFireUnlocked) {
+                    this.drawPanelActionButton(
+                        this.autoFireButton,
+                        "ENABLE AUTO FIRE",
+                        this.autoFireCost,
+                        this.points >= this.autoFireCost
+                    )
+                } else {
+                    this.drawPanelActionButton(
+                        this.autoFireButton,
+                        "Auto Fire: ON",
+                        "",
+                        true,
+                        true
+                    )
+                }
+            }
+            contentY += this.autoFireButton.height + cardSpacing
+
+            return contentY
+        }
+
+        if (sectionId === "world") {
+            this.worldSectionY = y
+
+            if (!isLayoutOnly) {
+                this.ctx.fillStyle = "#1f1f1f"
+                this.ctx.font = "16px Arial"
+                this.ctx.fillText("World Level: " + this.worldLevel, sectionX, contentY + 16)
+                this.ctx.fillText(
+                    "Transport Charge: " + this.transportCharge + " / " + this.transportChargeRequired,
+                    sectionX,
+                    contentY + 38
+                )
+
+                if (this.transportAnimating) {
+                    this.ctx.fillStyle = "#6d5fbf"
+                    this.ctx.font = "bold 16px Arial"
+                    this.ctx.fillText("TRANSPORTING...", sectionX, contentY + 62)
+                } else if (this.transportReady) {
+                    this.ctx.fillStyle = "#0f6a7a"
+                    this.ctx.font = "bold 16px Arial"
+                    this.ctx.fillText("ACTIVATE TRANSPORT BEAM", sectionX, contentY + 62)
+                }
+            }
+
+            return contentY + 80 + cardSpacing
+        }
+
+        return contentY + cardSpacing
+
+    }
+
     drawPanel() {
 
         const ctx = this.ctx
@@ -1581,6 +1946,7 @@ export class Game {
         ctx.lineWidth = 1
         ctx.strokeRect(0.5, 0.5, this.panelWidth - 1, this.canvas.height - 1)
         ctx.restore()
+        this.preparePanelLayout(true)
         this.clampPanelScroll()
 
         ctx.save()
@@ -1591,242 +1957,7 @@ export class Game {
 
         this.drawPointsHeader(ctx)
         this.drawOverchargeMeter(ctx)
-        this.drawPanelSectionHeader("lasers", "LASERS", 20, this.unlockButton.y - 44)
-
-        if (!this.hasLaser) {
-
-            if (this.isPanelSectionExpanded("lasers")) {
-                const button = this.unlockButton
-
-                ctx.fillStyle = "#e2e2db"
-                ctx.fillRect(button.x, button.y, button.width, button.height)
-
-                ctx.strokeStyle = "#222"
-                ctx.lineWidth = 2
-                ctx.strokeRect(button.x, button.y, button.width, button.height)
-
-                ctx.fillStyle = "#111"
-                ctx.font = "18px Arial"
-                ctx.fillText("Unlock Simple Laser", button.x + 12, button.y + 32)
-                ctx.font = "16px Arial"
-                ctx.fillText("Cost: " + this.simpleLaserCost, button.x + 12, button.y + 58)
-            }
-        } else {
-
-            if (this.isPanelSectionExpanded("lasers")) {
-                ctx.fillStyle = "#333"
-                ctx.font = "16px Arial"
-                ctx.fillText("Active: " + LASER_TYPES[this.currentLaserType].name, 20, 76)
-
-                if (!this.plasmaUnlocked) {
-
-                    this.drawPanelActionButton(
-                        this.plasmaUnlockButton,
-                        "Unlock Plasma Laser",
-                        "Milestone: " + this.plasmaUnlockPoints,
-                        this.points >= this.plasmaUnlockPoints
-                    )
-
-                } else {
-
-                    this.drawPanelActionButton(
-                        this.simpleLaserButton,
-                        "Simple Laser",
-                        this.currentLaserType === "simple" ? "Active" : "Switch",
-                        true,
-                        this.currentLaserType === "simple"
-                    )
-
-                    this.drawPanelActionButton(
-                        this.plasmaLaserButton,
-                        "Plasma Laser",
-                        this.currentLaserType === "plasma" ? "Active" : "Switch",
-                        true,
-                        this.currentLaserType === "plasma"
-                    )
-
-                    this.drawPanelActionButton(
-                        this.pulseLaserButton,
-                        "Pulse Laser",
-                        this.currentLaserType === "pulse" ? "Active" : "Switch",
-                        true,
-                        this.currentLaserType === "pulse"
-                    )
-
-                    this.drawPanelActionButton(
-                        this.scatterLaserButton,
-                        "Scatter Laser",
-                        this.currentLaserType === "scatter" ? "Active" : "Switch",
-                        true,
-                        this.currentLaserType === "scatter"
-                    )
-
-                    this.drawPanelActionButton(
-                        this.heavyLaserButton,
-                        "Heavy Laser",
-                        this.currentLaserType === "heavy" ? "Active" : "Switch",
-                        true,
-                        this.currentLaserType === "heavy"
-                    )
-
-                }
-            }
-
-            const frequencyCost = this.upgradeSystem.getFrequencyCost()
-            const amplitudeCost = this.upgradeSystem.getAmplitudeCost()
-            const fireRateCost = this.upgradeSystem.getFireRateCost()
-            const strengthCost = this.upgradeSystem.getStrengthCost()
-            const pulseMasteryCost = this.upgradeSystem.getPulseMasteryCost()
-            const scatterMasteryCost = this.upgradeSystem.getScatterMasteryCost()
-            const heavyMasteryCost = this.upgradeSystem.getHeavyMasteryCost()
-            const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
-            const activeLaserStats = this.laserTypeStats[this.currentLaserType]
-            const targetValueCost = this.targetUpgradeSystem.getValueCost()
-            const targetSpawnRateCost = this.targetUpgradeSystem.getSpawnRateCost()
-            const targetDiversityCost = this.targetUpgradeSystem.getDiversityCost()
-            const clickDamageCost = this.clickUpgradeSystem.getClickCost()
-
-            if (this.plasmaUnlocked) {
-                this.drawPanelSectionHeader("mastery", "LASER MASTERY", 20, this.pulseMasteryButton.y - 44)
-                if (this.isPanelSectionExpanded("mastery")) {
-                    this.drawPanelButton(
-                        this.pulseMasteryButton,
-                        "Pulse Mastery",
-                        pulseMasteryCost,
-                        this.pulseMasteryLevel,
-                        this.points >= pulseMasteryCost
-                    )
-                    this.drawPanelButton(
-                        this.scatterMasteryButton,
-                        "Scatter Mastery",
-                        scatterMasteryCost,
-                        this.scatterMasteryLevel,
-                        this.points >= scatterMasteryCost
-                    )
-                    this.drawPanelButton(
-                        this.heavyMasteryButton,
-                        "Heavy Mastery",
-                        heavyMasteryCost,
-                        this.heavyMasteryLevel,
-                        this.points >= heavyMasteryCost
-                    )
-                }
-            }
-
-            this.drawPanelSectionHeader("laserUpgrades", "LASER UPGRADES", 20, this.frequencyButton.y - 44)
-            if (this.isPanelSectionExpanded("laserUpgrades")) {
-                this.drawPanelButton(
-                    this.frequencyButton,
-                    "Increase Frequency",
-                    frequencyCost,
-                    activeLaserStats.frequencyLevel,
-                    this.points >= frequencyCost
-                )
-
-                this.drawPanelButton(
-                    this.amplitudeButton,
-                    "Increase Amplitude",
-                    amplitudeCost,
-                    activeLaserStats.amplitudeLevel,
-                    this.points >= amplitudeCost
-                )
-
-                if (this.autoFireUnlocked) {
-                    this.drawPanelButton(
-                        this.fireRateButton,
-                        "Increase Fire Rate",
-                        fireRateCost,
-                        activeLaserStats.fireRateLevel,
-                        this.points >= fireRateCost
-                    )
-                }
-
-                this.drawPanelButton(
-                    this.strengthButton,
-                    "Increase Laser Strength",
-                    strengthCost,
-                    activeLaserStats.strengthLevel,
-                    !strengthMaxed && this.points >= strengthCost
-                )
-            }
-
-            this.drawPanelSectionHeader("targetEconomy", "TARGET ECONOMY", 20, this.targetValueButton.y - 44)
-            if (this.isPanelSectionExpanded("targetEconomy")) {
-                this.drawPanelButton(
-                    this.targetValueButton,
-                    "Increase Target Value",
-                    targetValueCost,
-                    this.targetUpgradeSystem.valueLevel,
-                    this.points >= targetValueCost
-                )
-
-                this.drawPanelButton(
-                    this.targetSpawnRateButton,
-                    "Increase Spawn Rate",
-                    targetSpawnRateCost,
-                    this.targetUpgradeSystem.spawnRateLevel,
-                    this.points >= targetSpawnRateCost
-                )
-
-                this.drawPanelButton(
-                    this.targetDiversityButton,
-                    "Increase Target Diversity",
-                    targetDiversityCost,
-                    this.targetUpgradeSystem.diversityLevel,
-                    this.points >= targetDiversityCost
-                )
-
-                this.drawPanelButton(
-                    this.clickDamageButton,
-                    "Increase Click DMG (" + this.clickDamage + ")",
-                    clickDamageCost,
-                    this.clickUpgradeLevel,
-                    this.points >= clickDamageCost
-                )
-            }
-
-            this.drawPanelSectionHeader("automation", "AUTOMATION", 20, this.autoFireButton.y - 44)
-            if (this.isPanelSectionExpanded("automation")) {
-                if (!this.autoFireUnlocked) {
-                    this.drawPanelActionButton(
-                        this.autoFireButton,
-                        "Enable Auto Fire",
-                        "Cost: " + this.autoFireCost,
-                        this.points >= this.autoFireCost
-                    )
-                } else {
-                    this.drawPanelActionButton(
-                        this.autoFireButton,
-                        "Auto Fire: ON",
-                        "",
-                        true,
-                        true
-                    )
-                }
-            }
-        }
-
-        this.drawPanelSectionHeader("world", "WORLD", 20, this.worldSectionY)
-        if (this.isPanelSectionExpanded("world")) {
-            ctx.fillStyle = "#1f1f1f"
-            ctx.font = "16px Arial"
-            ctx.fillText("World Level: " + this.worldLevel, 20, this.worldSectionY + 30)
-            ctx.fillText(
-                "Transport Charge: " + this.transportCharge + " / " + this.transportChargeRequired,
-                20,
-                this.worldSectionY + 54
-            )
-
-            if (this.transportAnimating) {
-                ctx.fillStyle = "#6d5fbf"
-                ctx.font = "bold 16px Arial"
-                ctx.fillText("TRANSPORTING...", 20, this.worldSectionY + 80)
-            } else if (this.transportReady) {
-                ctx.fillStyle = "#0f6a7a"
-                ctx.font = "bold 16px Arial"
-                ctx.fillText("ACTIVATE TRANSPORT BEAM", 20, this.worldSectionY + 80)
-            }
-        }
+        this.preparePanelLayout(false)
 
         this.drawUpgradeFlashes(ctx)
 
@@ -2271,9 +2402,12 @@ export class Game {
         const hovered = this.isCardHovered(button)
         const flashIntensity = this.getCardFlashIntensity(button)
         const iconId = this.resolveActionCardIconId(title)
+        const costText = typeof subtitle === "number"
+            ? "Cost: " + subtitle
+            : subtitle || (active ? "ONLINE" : "")
         const state = {
             title,
-            cost: subtitle || (active ? "ONLINE" : ""),
+            cost: costText,
             level: 0,
             canAfford: enabled,
             selected: active,
