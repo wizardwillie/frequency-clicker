@@ -60,6 +60,19 @@ export class Game {
         this.infoScroll = 0
         this.showTargetIndex = false
         this.targetIndexScroll = 0
+        this.musicTracks = [
+            "assets/audio/meadow music 7.wav",
+            "assets/audio/meadow music 1.wav",
+            "assets/audio/meadow techno.wav",
+            "assets/audio/anothaone.wav",
+            "assets/audio/LILI.wav",
+            "assets/audio/meadowmusic.wav",
+            "assets/audio/CastleGatesV2.wav",
+            "assets/audio/meadow music 8.wav",
+            "assets/audio/gnomeforest.wav"
+        ]
+        this.currentMusic = null
+        this.isMuted = false
         this.worldLevel = WORLD_START_LEVEL
         this.transportCharge = 0
         this.transportChargeRequired = TRANSPORT_INITIAL_CHARGE_REQUIRED
@@ -294,6 +307,31 @@ export class Game {
             }
             this.togglePauseMenu()
         })
+        this.playRandomMusic()
+    }
+
+    playRandomMusic() {
+
+        if (this.isMuted) return
+
+        const track = this.musicTracks[Math.floor(Math.random() * this.musicTracks.length)]
+
+        if (this.currentMusic) {
+            this.currentMusic.pause()
+            this.currentMusic = null
+        }
+
+        const audio = new Audio(track)
+        audio.volume = 0.4
+        audio.loop = false
+
+        audio.addEventListener("ended", () => {
+            this.playRandomMusic()
+        })
+
+        audio.play().catch(() => {})
+
+        this.currentMusic = audio
     }
 
     configurePointAccessors() {
@@ -1144,7 +1182,8 @@ export class Game {
         const labels = [
             { id: "resume", label: "Resume" },
             { id: "save", label: "Save Game" },
-            { id: "mute", label: "Mute Audio" },
+            { id: "mute", label: this.isMuted ? "Unmute Audio" : "Mute Audio" },
+            { id: "skipSong", label: "Skip Song" },
             { id: "info", label: "Info" },
             { id: "targetIndex", label: "Target Index" },
             { id: "menu", label: "Main Menu" }
@@ -1188,11 +1227,32 @@ export class Game {
         }
 
         if (clickedButton.id === "mute") {
-            if (this.audio && typeof this.audio.toggleMute === "function") {
-                this.audio.toggleMute()
-            } else if (this.audio && "muted" in this.audio) {
-                this.audio.muted = !this.audio.muted
+            this.isMuted = !this.isMuted
+
+            if (this.isMuted) {
+
+                if (this.currentMusic) {
+                    this.currentMusic.pause()
+                }
+
+            } else {
+
+                if (this.currentMusic) {
+                    this.currentMusic.play().catch(() => {})
+                } else {
+                    this.playRandomMusic()
+                }
+
             }
+            return
+        }
+
+        if (clickedButton.id === "skipSong") {
+            if (this.currentMusic) {
+                this.currentMusic.pause()
+            }
+
+            this.playRandomMusic()
             return
         }
 
@@ -1214,6 +1274,9 @@ export class Game {
             this.showPauseMenu = false
             this.isPaused = false
             this.gameState = GAME_STATE_TITLE
+            if (this.currentMusic) {
+                this.currentMusic.pause()
+            }
         }
 
     }
@@ -2537,7 +2600,9 @@ export class Game {
         ctx.textBaseline = "middle"
         ctx.shadowColor = "#3a86ff"
         ctx.shadowBlur = 24
-        ctx.fillText("PAUSED", this.canvas.width / 2, (this.canvas.height / 2) - 170)
+        const centerY = this.canvas.height / 2
+        const titleY = centerY - 250
+        ctx.fillText("PAUSED", this.canvas.width / 2, titleY)
         ctx.shadowBlur = 0
 
         const buttons = this.getPauseMenuButtons()
