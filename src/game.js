@@ -259,6 +259,13 @@ export class Game {
         this.clickUpgradeSystem = new ClickUpgradeSystem(this)
         this.saveSystem = new SaveSystem(this)
         this.saveSystem.load()
+        this.hasSaveGame = false
+        try {
+            const save = localStorage.getItem("frequencyClickerSave") || localStorage.getItem("frequencyLaserClickerSave")
+            this.hasSaveGame = !!save
+        } catch {
+            this.hasSaveGame = false
+        }
         this.canvas.addEventListener("click", (event) => {
             this.handleClick(event)
         })
@@ -923,7 +930,7 @@ export class Game {
             }
 
             const titleButtons = this.getTitleButtons()
-            const hoveringTitleButton = Object.values(titleButtons).some(
+            const hoveringTitleButton = titleButtons.some(
                 button => this.isInsideButton(this.mouseX, this.mouseY, button)
             )
             this.canvas.style.cursor = hoveringTitleButton ? "pointer" : "default"
@@ -993,49 +1000,121 @@ export class Game {
         const buttonGap = 18
         const x = (this.canvas.width / 2) - (buttonWidth / 2)
         const startY = (this.canvas.height / 2) + 16
+        const buttons = []
 
-        return {
-            startButton: {
+        if (this.hasSaveGame) {
+            buttons.push({
+                id: "continue",
+                label: "Continue Game",
+                iconId: "simpleLaser",
                 x,
                 y: startY,
                 width: buttonWidth,
                 height: buttonHeight
-            },
-            infoButton: {
+            })
+            buttons.push({
+                id: "newGame",
+                label: "New Game",
+                iconId: "plasmaLaser",
                 x,
                 y: startY + buttonHeight + buttonGap,
                 width: buttonWidth,
                 height: buttonHeight
-            },
-            targetIndexButton: {
+            })
+            buttons.push({
+                id: "info",
+                label: "Info",
+                iconId: "targetValue",
                 x,
                 y: startY + (buttonHeight + buttonGap) * 2,
                 width: buttonWidth,
                 height: buttonHeight
-            }
+            })
+            buttons.push({
+                id: "targetIndex",
+                label: "Target Index",
+                iconId: "diversity",
+                x,
+                y: startY + (buttonHeight + buttonGap) * 3,
+                width: buttonWidth,
+                height: buttonHeight
+            })
+            return buttons
         }
+
+        buttons.push({
+            id: "start",
+            label: "Start Game",
+            iconId: "simpleLaser",
+            x,
+            y: startY,
+            width: buttonWidth,
+            height: buttonHeight
+        })
+        buttons.push({
+            id: "info",
+            label: "Info",
+            iconId: "targetValue",
+            x,
+            y: startY + buttonHeight + buttonGap,
+            width: buttonWidth,
+            height: buttonHeight
+        })
+        buttons.push({
+            id: "targetIndex",
+            label: "Target Index",
+            iconId: "diversity",
+            x,
+            y: startY + (buttonHeight + buttonGap) * 2,
+            width: buttonWidth,
+            height: buttonHeight
+        })
+
+        return buttons
 
     }
 
     handleTitleClick(mouseX, mouseY) {
 
         const buttons = this.getTitleButtons()
+        const clickedButton = buttons.find(button => this.isInsideButton(mouseX, mouseY, button))
+        if (!clickedButton) return
 
-        if (this.isInsideButton(mouseX, mouseY, buttons.startButton)) {
+        if (clickedButton.id === "continue") {
+            this.saveSystem.load()
+            this.hasSaveGame = true
             this.gameState = GAME_STATE_PLAYING
             this.showInfoScreen = false
             this.showTargetIndex = false
             return
         }
 
-        if (this.isInsideButton(mouseX, mouseY, buttons.infoButton)) {
+        if (clickedButton.id === "newGame") {
+            const shouldReset = confirm("Start a new game? This will reset saved progress.")
+            if (!shouldReset) return
+            this.saveSystem.reset()
+            this.hasSaveGame = false
+            this.gameState = GAME_STATE_PLAYING
+            this.showInfoScreen = false
+            this.showTargetIndex = false
+            return
+        }
+
+        if (clickedButton.id === "start") {
+            this.gameState = GAME_STATE_PLAYING
+            this.showInfoScreen = false
+            this.showTargetIndex = false
+            return
+        }
+
+        if (clickedButton.id === "info") {
             this.showInfoScreen = true
             this.infoScroll = 0
             this.showTargetIndex = false
             return
         }
 
-        if (this.isInsideButton(mouseX, mouseY, buttons.targetIndexButton)) {
+        if (clickedButton.id === "targetIndex") {
             this.showTargetIndex = true
             this.targetIndexScroll = 0
             this.showInfoScreen = false
@@ -2411,9 +2490,9 @@ export class Game {
             )
         }
 
-        drawTitleCard(buttons.startButton, "Start Game", "simpleLaser")
-        drawTitleCard(buttons.infoButton, "Info", "targetValue")
-        drawTitleCard(buttons.targetIndexButton, "Target Index", "diversity")
+        for (const button of buttons) {
+            drawTitleCard(button, button.label, button.iconId)
+        }
 
     }
 
