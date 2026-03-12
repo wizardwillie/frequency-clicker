@@ -11,6 +11,9 @@ import {
     TARGET_ARMORED_CHANCE,
     TARGET_HIGH_VALUE_CHANCE,
     TARGET_FAST_CHANCE,
+    TARGET_GOLDEN_CHANCE,
+    TARGET_PHANTOM_CHANCE,
+    TARGET_ANCIENT_CHANCE,
     TARGET_HEAVY_VALUE_MULTIPLIER,
     TARGET_SHIELDED_VALUE_MULTIPLIER,
     TARGET_REFLECTOR_VALUE_MULTIPLIER,
@@ -20,6 +23,9 @@ import {
     TARGET_ARMORED_VALUE_MULTIPLIER,
     TARGET_HIGH_VALUE_VALUE_MULTIPLIER,
     TARGET_FAST_VALUE_MULTIPLIER,
+    TARGET_GOLDEN_VALUE_MULTIPLIER,
+    TARGET_PHANTOM_VALUE_MULTIPLIER,
+    TARGET_ANCIENT_VALUE_MULTIPLIER,
     TARGET_HEAVY_HEALTH,
     TARGET_SHIELDED_HEALTH,
     TARGET_REFLECTOR_HEALTH,
@@ -27,6 +33,9 @@ import {
     TARGET_SWARM_HEALTH,
     TARGET_BOSS_HEALTH,
     TARGET_FAST_HEALTH,
+    TARGET_GOLDEN_HEALTH,
+    TARGET_PHANTOM_HEALTH,
+    TARGET_ANCIENT_HEALTH,
     TARGET_ARMORED_HEALTH,
     TARGET_REINFORCED_UNLOCK_LEVEL,
     TARGET_FAST_UNLOCK_LEVEL,
@@ -46,10 +55,16 @@ import {
     TARGET_SWARM_RADIUS,
     TARGET_BOSS_RADIUS,
     TARGET_FAST_RADIUS,
+    TARGET_GOLDEN_RADIUS,
+    TARGET_PHANTOM_RADIUS,
+    TARGET_ANCIENT_RADIUS,
     TARGET_HEAVY_SPEED_MULTIPLIER,
     TARGET_SWARM_SPEED_MULTIPLIER,
     TARGET_BOSS_SPEED_MULTIPLIER,
     TARGET_FAST_SPEED_MULTIPLIER,
+    TARGET_GOLDEN_SPEED_MULTIPLIER,
+    TARGET_PHANTOM_SPEED_MULTIPLIER,
+    TARGET_ANCIENT_SPEED_MULTIPLIER,
     TARGET_SWARM_GROUP_SIZE,
     MAX_ACTIVE_TARGETS,
     WORLD_DATA
@@ -273,6 +288,16 @@ export class SpawnSystem {
         }
 
         if (!type) {
+            if (Math.random() < TARGET_ANCIENT_CHANCE) {
+                type = "ancient"
+            } else if (Math.random() < TARGET_PHANTOM_CHANCE) {
+                type = "phantom"
+            } else if (Math.random() < TARGET_GOLDEN_CHANCE) {
+                type = "golden"
+            }
+        }
+
+        if (!type) {
             const availableTypes = weightedTypes.filter(entry => entry.unlocked).map(entry => ({ ...entry }))
 
             if (basicAllowed) {
@@ -317,7 +342,22 @@ export class SpawnSystem {
         let chargeBurstTime = 0
         let chargeSpeedMultiplier = TARGET_CHARGER_BURST_MULTIPLIER
 
-        if (type === "boss") {
+        if (type === "golden") {
+            valueMultiplier = TARGET_GOLDEN_VALUE_MULTIPLIER
+            maxHealth = TARGET_GOLDEN_HEALTH
+            radius = TARGET_GOLDEN_RADIUS
+            speed = baseSpeed * TARGET_GOLDEN_SPEED_MULTIPLIER
+        } else if (type === "phantom") {
+            valueMultiplier = TARGET_PHANTOM_VALUE_MULTIPLIER
+            maxHealth = TARGET_PHANTOM_HEALTH
+            radius = TARGET_PHANTOM_RADIUS
+            speed = baseSpeed * TARGET_PHANTOM_SPEED_MULTIPLIER
+        } else if (type === "ancient") {
+            valueMultiplier = TARGET_ANCIENT_VALUE_MULTIPLIER
+            maxHealth = TARGET_ANCIENT_HEALTH
+            radius = TARGET_ANCIENT_RADIUS
+            speed = baseSpeed * TARGET_ANCIENT_SPEED_MULTIPLIER
+        } else if (type === "boss") {
             valueMultiplier = TARGET_BOSS_VALUE_MULTIPLIER
             maxHealth = TARGET_BOSS_HEALTH
             radius = TARGET_BOSS_RADIUS

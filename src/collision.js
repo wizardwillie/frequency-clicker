@@ -251,6 +251,10 @@ export class CollisionSystem {
 
         if (!target) return
 
+        if (typeof this.game.registerTargetDiscovery === "function") {
+            this.game.registerTargetDiscovery(target.type)
+        }
+
         if (target.type === "splitter") {
             this.spawnSplitterFragments(target)
         }

@@ -7,6 +7,7 @@ export class FloatingText {
 
         this.text = text
         this.color = color
+        this.game = null
 
         this.life = 1
         this.speed = 40
@@ -22,6 +23,13 @@ export class FloatingText {
     }
 
     draw(ctx) {
+
+        if (!this.game && typeof window !== "undefined") {
+            this.game = window.game || window.__frequencyLaserClickerGame || null
+        }
+
+        const gridX = this.game?.gridX ?? 320
+        if (this.x < gridX) return
 
         ctx.globalAlpha = Math.max(this.life, 0)
 

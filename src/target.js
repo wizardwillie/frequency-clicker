@@ -22,6 +22,9 @@ export class Target {
         this.chargeSpeedMultiplier = options.chargeSpeedMultiplier ?? 3
         this.hasShield = options.hasShield ?? false
         const defaultRadiusByType = {
+            golden: 16,
+            phantom: 17,
+            ancient: 30,
             armored: 18,
             reinforced: 22,
             heavy: 26,
@@ -52,6 +55,8 @@ export class Target {
         this.hitFlashDuration = 0.12
         this.hitFlashTime = 0
         this.pulseTime = Math.random() * Math.PI * 2
+        this.phantomDriftTimer = options.phantomDriftTimer ?? (Math.random() * 2.5)
+        this.phantomDriftInterval = options.phantomDriftInterval ?? (1.8 + (Math.random() * 1.6))
     }
 
     update(delta) {
@@ -80,6 +85,25 @@ export class Target {
             if (this.chargeBurstTime > 0) {
                 this.chargeBurstTime = Math.max(0, this.chargeBurstTime - delta)
                 moveSpeed *= this.chargeSpeedMultiplier
+            }
+        } else if (this.type === "phantom") {
+            this.phantomDriftTimer += delta
+            if (this.phantomDriftTimer >= this.phantomDriftInterval) {
+                this.phantomDriftTimer -= this.phantomDriftInterval
+                this.phantomDriftInterval = 1.8 + (Math.random() * 1.6)
+
+                const driftDistance = 22
+                this.x += (Math.random() - 0.5) * driftDistance
+                this.y += (Math.random() - 0.5) * driftDistance
+
+                if (this.game) {
+                    const minX = this.gridLeftBoundary + this.radius
+                    const maxX = this.game.canvas.width - this.radius
+                    const minY = this.radius
+                    const maxY = this.game.canvas.height - this.radius
+                    this.x = Math.max(minX, Math.min(maxX, this.x))
+                    this.y = Math.max(minY, Math.min(maxY, this.y))
+                }
             }
         }
 
@@ -132,7 +156,32 @@ export class Target {
             this.chargeBurstTime <= 0 &&
             this.chargeTimer > Math.max(0, this.chargeCooldown - chargerWarningWindow)
 
-        if (this.type === "armored") {
+        if (this.type === "golden") {
+            fillColor = "#ffd700"
+            strokeColor = "#b8860b"
+            strokeWidth = 3
+            coreColor = "#fff2a8"
+            healthBarBackground = "#3a2c0f"
+            healthBarFill = "#ffe37a"
+            drawStroke = true
+        } else if (this.type === "phantom") {
+            fillColor = "#9b5cff"
+            strokeColor = "#9b5cff"
+            strokeWidth = 3
+            coreColor = "#e3ccff"
+            healthBarBackground = "#2a1a3f"
+            healthBarFill = "#c6a0ff"
+            drawStroke = true
+            baseAlpha = 0.8 + (Math.sin(this.pulseTime * 3) * 0.08)
+        } else if (this.type === "ancient") {
+            fillColor = "#ff4a4a"
+            strokeColor = "#5b1111"
+            strokeWidth = 4
+            coreColor = "#ff9c9c"
+            healthBarBackground = "#3a1414"
+            healthBarFill = "#ff6f6f"
+            drawStroke = true
+        } else if (this.type === "armored") {
             fillColor = "#56d17e"
             strokeColor = "#1d6a34"
             strokeWidth = 3
@@ -228,7 +277,13 @@ export class Target {
             coreColor = "#fff0a8"
         }
 
-        if (this.hitFlashTime > 0 && this.type === "armored") {
+        if (this.hitFlashTime > 0 && this.type === "golden") {
+            fillColor = "#fff1a3"
+        } else if (this.hitFlashTime > 0 && this.type === "phantom") {
+            fillColor = "#cfb4ff"
+        } else if (this.hitFlashTime > 0 && this.type === "ancient") {
+            fillColor = "#ff8585"
+        } else if (this.hitFlashTime > 0 && this.type === "armored") {
             fillColor = "#b9ffce"
         } else if (this.hitFlashTime > 0 && this.type === "reinforced") {
             fillColor = "#f0a3ff"
@@ -305,6 +360,17 @@ export class Target {
             ctx.lineWidth = 2
             ctx.arc(this.x, this.y, radius + 4, 0, Math.PI * 2)
             ctx.stroke()
+        }
+
+        if (this.type === "phantom") {
+            ctx.save()
+            ctx.globalAlpha = 0.4 * baseAlpha
+            ctx.strokeStyle = "#9b5cff"
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.arc(this.x, this.y, radius + 5, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
         }
 
         if (this.type === "splitter") {

@@ -54,6 +54,12 @@ export class Game {
         this.canvas = canvas
         this.ctx = canvas.getContext("2d")
         this.gameState = GAME_STATE_TITLE
+        this.isPaused = false
+        this.showPauseMenu = false
+        this.showInfoScreen = false
+        this.infoScroll = 0
+        this.showTargetIndex = false
+        this.targetIndexScroll = 0
         this.worldLevel = WORLD_START_LEVEL
         this.transportCharge = 0
         this.transportChargeRequired = TRANSPORT_INITIAL_CHARGE_REQUIRED
@@ -76,6 +82,7 @@ export class Game {
         this.targets = []
         this.lasers = []
         this.floatingTexts = []
+        this.discoveredTargets = new Set()
         this.simpleLaserCost = SIMPLE_LASER_COST
         this.autoFireCost = AUTO_FIRE_COST
         this.autoFireSpeedMultiplier = AUTO_FIRE_SPEED_MULTIPLIER
@@ -266,6 +273,20 @@ export class Game {
         this.canvas.addEventListener("wheel", (event) => {
             this.handleWheel(event)
         }, { passive: false })
+        window.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return
+            if (event.repeat) return
+            if (this.gameState !== GAME_STATE_PLAYING) return
+            if (this.showTargetIndex) {
+                this.showTargetIndex = false
+                return
+            }
+            if (this.showInfoScreen) {
+                this.showInfoScreen = false
+                return
+            }
+            this.togglePauseMenu()
+        })
     }
 
     configurePointAccessors() {
@@ -628,6 +649,26 @@ export class Game {
 
     }
 
+    registerTargetDiscovery(type) {
+
+        const targetType = String(type || "")
+        if (!targetType) return
+
+        if (!this.discoveredTargets.has(targetType)) {
+            this.discoveredTargets.add(targetType)
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    this.gridX + this.gridWidth / 2,
+                    this.canvas.height * 0.35,
+                    "NEW TARGET DISCOVERED",
+                    "#ffd24a"
+                )
+            )
+        }
+
+    }
+
     handleClick(event) {
 
         const rect = this.canvas.getBoundingClientRect()
@@ -639,7 +680,30 @@ export class Game {
         }
 
         if (this.gameState === GAME_STATE_TITLE) {
+            if (this.showTargetIndex) {
+                this.handleTargetIndexClick(mouseX, mouseY)
+                return
+            }
+            if (this.showInfoScreen) {
+                this.handleInfoScreenClick(mouseX, mouseY)
+                return
+            }
             this.handleTitleClick(mouseX, mouseY)
+            return
+        }
+
+        if (this.showTargetIndex) {
+            this.handleTargetIndexClick(mouseX, mouseY)
+            return
+        }
+
+        if (this.showInfoScreen) {
+            this.handleInfoScreenClick(mouseX, mouseY)
+            return
+        }
+
+        if (this.showPauseMenu) {
+            this.handlePauseMenuClick(mouseX, mouseY)
             return
         }
 
@@ -673,7 +737,26 @@ export class Game {
 
     handleWheel(event) {
 
+        if (this.showTargetIndex) {
+            event.preventDefault()
+            this.targetIndexScroll += event.deltaY
+            this.clampTargetIndexScroll()
+            return
+        }
+
+        if (this.showInfoScreen) {
+            event.preventDefault()
+            this.infoScroll += event.deltaY
+            this.clampInfoScroll()
+            return
+        }
+
         if (this.gameState !== GAME_STATE_PLAYING) {
+            return
+        }
+
+        if (this.showPauseMenu) {
+            event.preventDefault()
             return
         }
 
@@ -702,6 +785,24 @@ export class Game {
     getPanelMouseY() {
 
         return this.mouseY + this.panelScroll
+
+    }
+
+    getPanelLayoutMetrics() {
+
+        const panelX = 0
+        const panelWidth = this.panelWidth
+        const padding = 16
+        const contentX = panelX + padding
+        const contentWidth = panelWidth - (padding * 2)
+
+        return {
+            panelX,
+            panelWidth,
+            padding,
+            contentX,
+            contentWidth
+        }
 
     }
 
@@ -806,8 +907,51 @@ export class Game {
             return
         }
 
+        if (this.gameState === GAME_STATE_TITLE) {
+            if (this.showTargetIndex) {
+                this.canvas.style.cursor = this.isHoveringTargetIndexBackButton(this.mouseX, this.mouseY)
+                    ? "pointer"
+                    : "default"
+                return
+            }
+
+            if (this.showInfoScreen) {
+                this.canvas.style.cursor = this.isHoveringInfoBackButton(this.mouseX, this.mouseY)
+                    ? "pointer"
+                    : "default"
+                return
+            }
+
+            const titleButtons = this.getTitleButtons()
+            const hoveringTitleButton = Object.values(titleButtons).some(
+                button => this.isInsideButton(this.mouseX, this.mouseY, button)
+            )
+            this.canvas.style.cursor = hoveringTitleButton ? "pointer" : "default"
+            return
+        }
+
         if (this.gameState !== GAME_STATE_PLAYING) {
             this.canvas.style.cursor = "default"
+            return
+        }
+
+        if (this.showTargetIndex) {
+            this.canvas.style.cursor = this.isHoveringTargetIndexBackButton(this.mouseX, this.mouseY)
+                ? "pointer"
+                : "default"
+            return
+        }
+
+        if (this.showInfoScreen) {
+            this.canvas.style.cursor = this.isHoveringInfoBackButton(this.mouseX, this.mouseY)
+                ? "pointer"
+                : "default"
+            return
+        }
+
+        if (this.showPauseMenu) {
+            const hoveringPauseButton = this.isHoveringPauseMenuButton(this.mouseX, this.mouseY)
+            this.canvas.style.cursor = hoveringPauseButton ? "pointer" : "default"
             return
         }
 
@@ -848,22 +992,22 @@ export class Game {
         const buttonHeight = 56
         const buttonGap = 18
         const x = (this.canvas.width / 2) - (buttonWidth / 2)
-        const startY = (this.canvas.height / 2) - 24
+        const startY = (this.canvas.height / 2) + 16
 
         return {
-            continueButton: {
+            startButton: {
                 x,
                 y: startY,
                 width: buttonWidth,
                 height: buttonHeight
             },
-            newGameButton: {
+            infoButton: {
                 x,
                 y: startY + buttonHeight + buttonGap,
                 width: buttonWidth,
                 height: buttonHeight
             },
-            resetButton: {
+            targetIndexButton: {
                 x,
                 y: startY + (buttonHeight + buttonGap) * 2,
                 width: buttonWidth,
@@ -877,20 +1021,369 @@ export class Game {
 
         const buttons = this.getTitleButtons()
 
-        if (this.isInsideButton(mouseX, mouseY, buttons.continueButton)) {
+        if (this.isInsideButton(mouseX, mouseY, buttons.startButton)) {
             this.gameState = GAME_STATE_PLAYING
+            this.showInfoScreen = false
+            this.showTargetIndex = false
             return
         }
 
-        if (this.isInsideButton(mouseX, mouseY, buttons.newGameButton)) {
-            this.saveSystem.reset()
-            this.gameState = GAME_STATE_PLAYING
+        if (this.isInsideButton(mouseX, mouseY, buttons.infoButton)) {
+            this.showInfoScreen = true
+            this.infoScroll = 0
+            this.showTargetIndex = false
             return
         }
 
-        if (this.isInsideButton(mouseX, mouseY, buttons.resetButton)) {
-            this.saveSystem.reset()
-            location.reload()
+        if (this.isInsideButton(mouseX, mouseY, buttons.targetIndexButton)) {
+            this.showTargetIndex = true
+            this.targetIndexScroll = 0
+            this.showInfoScreen = false
+        }
+
+    }
+
+    togglePauseMenu() {
+
+        this.showPauseMenu = !this.showPauseMenu
+        this.isPaused = this.showPauseMenu
+        if (!this.showPauseMenu) {
+            this.showInfoScreen = false
+            this.infoScroll = 0
+            this.showTargetIndex = false
+            this.targetIndexScroll = 0
+        }
+        this.canvas.style.cursor = "default"
+
+    }
+
+    getPauseMenuButtons() {
+
+        const buttonWidth = 300
+        const buttonHeight = 54
+        const buttonGap = 12
+        const labels = [
+            { id: "resume", label: "Resume" },
+            { id: "save", label: "Save Game" },
+            { id: "mute", label: "Mute Audio" },
+            { id: "info", label: "Info" },
+            { id: "targetIndex", label: "Target Index" },
+            { id: "menu", label: "Main Menu" }
+        ]
+        const totalHeight = (labels.length * buttonHeight) + ((labels.length - 1) * buttonGap)
+        const startX = (this.canvas.width / 2) - (buttonWidth / 2)
+        const startY = (this.canvas.height / 2) - (totalHeight / 2) + 24
+
+        return labels.map((entry, index) => ({
+            id: entry.id,
+            label: entry.label,
+            x: startX,
+            y: startY + (index * (buttonHeight + buttonGap)),
+            width: buttonWidth,
+            height: buttonHeight
+        }))
+
+    }
+
+    isHoveringPauseMenuButton(mouseX, mouseY) {
+
+        const buttons = this.getPauseMenuButtons()
+        return buttons.some(button => this.isInsideButton(mouseX, mouseY, button))
+
+    }
+
+    handlePauseMenuClick(mouseX, mouseY) {
+
+        const buttons = this.getPauseMenuButtons()
+        const clickedButton = buttons.find(button => this.isInsideButton(mouseX, mouseY, button))
+        if (!clickedButton) return
+
+        if (clickedButton.id === "resume") {
+            this.togglePauseMenu()
+            return
+        }
+
+        if (clickedButton.id === "save") {
+            this.saveSystem.save()
+            return
+        }
+
+        if (clickedButton.id === "mute") {
+            if (this.audio && typeof this.audio.toggleMute === "function") {
+                this.audio.toggleMute()
+            } else if (this.audio && "muted" in this.audio) {
+                this.audio.muted = !this.audio.muted
+            }
+            return
+        }
+
+        if (clickedButton.id === "info") {
+            this.showInfoScreen = true
+            this.infoScroll = 0
+            this.showTargetIndex = false
+            return
+        }
+
+        if (clickedButton.id === "targetIndex") {
+            this.showTargetIndex = true
+            this.targetIndexScroll = 0
+            this.showInfoScreen = false
+            return
+        }
+
+        if (clickedButton.id === "menu") {
+            this.showPauseMenu = false
+            this.isPaused = false
+            this.gameState = GAME_STATE_TITLE
+        }
+
+    }
+
+    getInfoScreenLayout() {
+
+        const panelWidth = Math.min(760, this.canvas.width - 96)
+        const panelHeight = Math.min(560, this.canvas.height - 96)
+        const panelX = (this.canvas.width - panelWidth) / 2
+        const panelY = (this.canvas.height - panelHeight) / 2
+        const contentX = panelX + 28
+        const contentY = panelY + 92
+        const contentWidth = panelWidth - 56
+        const contentHeight = panelHeight - 128
+
+        return {
+            panel: {
+                x: panelX,
+                y: panelY,
+                width: panelWidth,
+                height: panelHeight
+            },
+            content: {
+                x: contentX,
+                y: contentY,
+                width: contentWidth,
+                height: contentHeight
+            },
+            backButton: {
+                x: panelX + 18,
+                y: panelY + 18,
+                width: 94,
+                height: 36
+            },
+            titleY: panelY + 42
+        }
+
+    }
+
+    getInfoSections() {
+
+        return [
+            {
+                title: "GAMEPLAY",
+                body: "Click targets to earn energy points."
+            },
+            {
+                title: "LASERS",
+                body: "Each laser type behaves differently."
+            },
+            {
+                title: "UPGRADES",
+                body: "Improve laser stats and economy systems."
+            },
+            {
+                title: "TARGETS",
+                body: "Different enemies require different strategies."
+            },
+            {
+                title: "WORLDS",
+                body: "Transport beams allow travel to new worlds."
+            },
+            {
+                title: "TRANSPORT BEAM",
+                body: "Charge the beam by defeating enemies."
+            },
+            {
+                title: "LORE",
+                body: "In the distant future, scientists weaponized energy frequencies to defend humanity from dimensional swarms."
+            }
+        ]
+
+    }
+
+    wrapInfoText(ctx, text, maxWidth) {
+
+        const wrappedLines = []
+        const rawLines = String(text || "").split("\n")
+
+        for (const rawLine of rawLines) {
+            const words = rawLine.split(/\s+/).filter(Boolean)
+            if (words.length === 0) {
+                wrappedLines.push("")
+                continue
+            }
+
+            let currentLine = words[0]
+            for (let i = 1; i < words.length; i++) {
+                const nextLine = currentLine + " " + words[i]
+                if (ctx.measureText(nextLine).width <= maxWidth) {
+                    currentLine = nextLine
+                } else {
+                    wrappedLines.push(currentLine)
+                    currentLine = words[i]
+                }
+            }
+            wrappedLines.push(currentLine)
+        }
+
+        return wrappedLines
+
+    }
+
+    getInfoContentHeight() {
+
+        const layout = this.getInfoScreenLayout()
+        const sections = this.getInfoSections()
+        const lineHeight = 20
+        let y = 0
+
+        this.ctx.save()
+        this.ctx.font = "16px Arial"
+        for (const section of sections) {
+            y += 22
+            const wrappedBody = this.wrapInfoText(this.ctx, section.body, layout.content.width)
+            y += wrappedBody.length * lineHeight
+            y += 16
+        }
+        this.ctx.restore()
+
+        return Math.max(layout.content.height, y)
+
+    }
+
+    getMaxInfoScroll() {
+
+        const layout = this.getInfoScreenLayout()
+        return Math.max(0, this.getInfoContentHeight() - layout.content.height)
+
+    }
+
+    clampInfoScroll() {
+
+        const maxInfoScroll = this.getMaxInfoScroll()
+        this.infoScroll = Math.max(0, Math.min(this.infoScroll, maxInfoScroll))
+
+    }
+
+    isHoveringInfoBackButton(mouseX, mouseY) {
+
+        const { backButton } = this.getInfoScreenLayout()
+        return this.isInsideButton(mouseX, mouseY, backButton)
+
+    }
+
+    handleInfoScreenClick(mouseX, mouseY) {
+
+        const { backButton } = this.getInfoScreenLayout()
+        if (this.isInsideButton(mouseX, mouseY, backButton)) {
+            this.showInfoScreen = false
+            this.canvas.style.cursor = "default"
+        }
+
+    }
+
+    getTargetIndexLayout() {
+
+        const panelWidth = Math.min(700, this.canvas.width - 120)
+        const panelHeight = Math.min(560, this.canvas.height - 96)
+        const panelX = (this.canvas.width - panelWidth) / 2
+        const panelY = (this.canvas.height - panelHeight) / 2
+        const contentX = panelX + 28
+        const contentY = panelY + 92
+        const contentWidth = panelWidth - 56
+        const contentHeight = panelHeight - 128
+
+        return {
+            panel: {
+                x: panelX,
+                y: panelY,
+                width: panelWidth,
+                height: panelHeight
+            },
+            content: {
+                x: contentX,
+                y: contentY,
+                width: contentWidth,
+                height: contentHeight
+            },
+            backButton: {
+                x: panelX + 18,
+                y: panelY + 18,
+                width: 94,
+                height: 36
+            },
+            titleY: panelY + 42
+        }
+
+    }
+
+    getTargetIndexEntries() {
+
+        return [
+            { id: "basic", label: "Basic" },
+            { id: "highValue", label: "High Value" },
+            { id: "fast", label: "Fast" },
+            { id: "armored", label: "Armored" },
+            { id: "reinforced", label: "Reinforced" },
+            { id: "shielded", label: "Shielded" },
+            { id: "heavy", label: "Heavy" },
+            { id: "splitter", label: "Splitter" },
+            { id: "reflector", label: "Reflector" },
+            { id: "swarm", label: "Swarm" },
+            { id: "phase", label: "Phase" },
+            { id: "charger", label: "Charger" },
+            { id: "fragment", label: "Fragment" },
+            { id: "boss", label: "Boss" }
+        ]
+
+    }
+
+    getTargetIndexContentHeight() {
+
+        const entries = this.getTargetIndexEntries()
+        const rowHeight = 34
+        const topPadding = 8
+        const bottomPadding = 8
+
+        return topPadding + (entries.length * rowHeight) + bottomPadding
+
+    }
+
+    getMaxTargetIndexScroll() {
+
+        const layout = this.getTargetIndexLayout()
+        return Math.max(0, this.getTargetIndexContentHeight() - layout.content.height)
+
+    }
+
+    clampTargetIndexScroll() {
+
+        const maxTargetIndexScroll = this.getMaxTargetIndexScroll()
+        this.targetIndexScroll = Math.max(0, Math.min(this.targetIndexScroll, maxTargetIndexScroll))
+
+    }
+
+    isHoveringTargetIndexBackButton(mouseX, mouseY) {
+
+        const { backButton } = this.getTargetIndexLayout()
+        return this.isInsideButton(mouseX, mouseY, backButton)
+
+    }
+
+    handleTargetIndexClick(mouseX, mouseY) {
+
+        const { backButton } = this.getTargetIndexLayout()
+        if (this.isInsideButton(mouseX, mouseY, backButton)) {
+            this.showTargetIndex = false
+            this.canvas.style.cursor = "default"
         }
 
     }
@@ -1539,6 +2032,18 @@ export class Game {
             return
         }
 
+        if (this.showTargetIndex) {
+            return
+        }
+
+        if (this.showInfoScreen) {
+            return
+        }
+
+        if (this.isPaused) {
+            return
+        }
+
         const hasTimeWarp =
             this.activeWorldModifiers &&
             this.activeWorldModifiers.includes("timeWarp")
@@ -1636,6 +2141,12 @@ export class Game {
 
         if (this.gameState === GAME_STATE_TITLE) {
             this.drawTitleScreen(this.ctx)
+            if (this.showInfoScreen) {
+                this.drawInfoScreen(this.ctx)
+            }
+            if (this.showTargetIndex) {
+                this.drawTargetIndex(this.ctx)
+            }
             return
         }
 
@@ -1669,6 +2180,18 @@ export class Game {
 
         for (let text of this.floatingTexts) {
             text.draw(this.ctx)
+        }
+
+        if (this.showPauseMenu) {
+            this.drawPauseMenu(this.ctx)
+        }
+
+        if (this.showInfoScreen) {
+            this.drawInfoScreen(this.ctx)
+        }
+
+        if (this.showTargetIndex) {
+            this.drawTargetIndex(this.ctx)
         }
     }
 
@@ -1819,24 +2342,436 @@ export class Game {
 
         const buttons = this.getTitleButtons()
         const centerX = this.canvas.width / 2
+        const pulse = 0.5 + Math.sin(performance.now() * 0.002) * 0.5
 
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
-        ctx.fillStyle = "#101214"
+
+        const bgGradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height)
+        bgGradient.addColorStop(0, "#050914")
+        bgGradient.addColorStop(1, "#0b1020")
+        ctx.fillStyle = bgGradient
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
 
-        ctx.fillStyle = "#f4f4ee"
-        ctx.font = "bold 58px Arial"
+        ctx.save()
+        ctx.strokeStyle = "rgba(58,134,255,0.12)"
+        ctx.lineWidth = 1
+        const spacing = 42
+        for (let x = 0; x <= this.canvas.width; x += spacing) {
+            ctx.beginPath()
+            ctx.moveTo(x + 0.5, 0)
+            ctx.lineTo(x + 0.5, this.canvas.height)
+            ctx.stroke()
+        }
+        for (let y = 0; y <= this.canvas.height; y += spacing) {
+            ctx.beginPath()
+            ctx.moveTo(0, y + 0.5)
+            ctx.lineTo(this.canvas.width, y + 0.5)
+            ctx.stroke()
+        }
+        ctx.restore()
+
+        ctx.save()
         ctx.textAlign = "center"
-        ctx.fillText("Frequency Laser Clicker", centerX, 180)
+        ctx.textBaseline = "middle"
+        ctx.font = "bold 48px Arial"
+        const logoGradient = ctx.createLinearGradient(centerX - 260, 0, centerX + 260, 0)
+        logoGradient.addColorStop(0, "#3a86ff")
+        logoGradient.addColorStop(1, "#9b5cff")
+        ctx.fillStyle = logoGradient
+        ctx.shadowColor = "#6ea6ff"
+        ctx.shadowBlur = 16 + (pulse * 20)
+        ctx.fillText("FREQUENCY CLICKER", centerX, 188)
+        ctx.restore()
 
-        ctx.fillStyle = "#c8c8c0"
-        ctx.font = "20px Arial"
-        ctx.fillText("Choose an option to begin", centerX, 228)
+        ctx.fillStyle = "rgba(220,230,255,0.85)"
+        ctx.font = "16px Arial"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText("Arcade Incremental Sinewave Combat", centerX, 236)
+
+        const drawTitleCard = (button, title, iconId) => {
+            const hovered = this.isInsideButton(this.mouseX, this.mouseY, button)
+            this.drawUpgradeCard(
+                ctx,
+                button.x,
+                button.y,
+                button.width,
+                button.height,
+                {
+                    title,
+                    cost: "",
+                    level: 0,
+                    canAfford: true,
+                    selected: false,
+                    unlocked: true,
+                    hovered,
+                    flashIntensity: 0,
+                    iconId
+                }
+            )
+        }
+
+        drawTitleCard(buttons.startButton, "Start Game", "simpleLaser")
+        drawTitleCard(buttons.infoButton, "Info", "targetValue")
+        drawTitleCard(buttons.targetIndexButton, "Target Index", "diversity")
+
+    }
+
+    drawPauseMenuButton(ctx, button, hovered = false) {
+
+        const radius = 12
+        const gradient = ctx.createLinearGradient(button.x, button.y, button.x, button.y + button.height)
+        gradient.addColorStop(0, hovered ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.07)")
+        gradient.addColorStop(1, hovered ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)")
+
+        ctx.save()
+        this.drawRoundedRectPath(ctx, button.x, button.y, button.width, button.height, radius)
+        ctx.fillStyle = gradient
+        ctx.fill()
+
+        ctx.shadowColor = hovered ? "#9b5cff" : "#3a86ff"
+        ctx.shadowBlur = hovered ? 18 : 12
+        this.drawRoundedRectPath(ctx, button.x, button.y, button.width, button.height, radius)
+        ctx.strokeStyle = hovered ? "rgba(155,92,255,0.85)" : "rgba(58,134,255,0.65)"
+        ctx.lineWidth = 1.4
+        ctx.stroke()
+
+        ctx.shadowBlur = 0
+        ctx.fillStyle = "#eaf3ff"
+        ctx.font = "700 15px Arial"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText(button.label.toUpperCase(), button.x + (button.width / 2), button.y + (button.height / 2))
+        ctx.restore()
+
+    }
+
+    drawPauseMenu(ctx) {
+
+        ctx.save()
+        ctx.fillStyle = "rgba(0,0,0,0.6)"
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+        ctx.fillStyle = "#f0f6ff"
+        ctx.font = "bold 54px Arial"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.shadowColor = "#3a86ff"
+        ctx.shadowBlur = 24
+        ctx.fillText("PAUSED", this.canvas.width / 2, (this.canvas.height / 2) - 170)
+        ctx.shadowBlur = 0
+
+        const buttons = this.getPauseMenuButtons()
+        for (const button of buttons) {
+            const hovered = this.isInsideButton(this.mouseX, this.mouseY, button)
+            this.drawPauseMenuButton(ctx, button, hovered)
+        }
+
+        ctx.restore()
+
+    }
+
+    drawInfoScreen(ctx) {
+
+        const layout = this.getInfoScreenLayout()
+        const sections = this.getInfoSections()
+        this.clampInfoScroll()
+
+        ctx.save()
+        ctx.fillStyle = "rgba(0,0,0,0.75)"
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+        const panelGradient = ctx.createLinearGradient(
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.x,
+            layout.panel.y + layout.panel.height
+        )
+        panelGradient.addColorStop(0, "rgba(20,27,46,0.94)")
+        panelGradient.addColorStop(1, "rgba(12,17,30,0.94)")
+
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.fillStyle = panelGradient
+        ctx.fill()
+
+        ctx.shadowColor = "#3a86ff"
+        ctx.shadowBlur = 18
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.strokeStyle = "rgba(58,134,255,0.55)"
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+        ctx.shadowBlur = 0
+
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillStyle = "#e9f3ff"
+        ctx.font = "bold 34px Arial"
+        ctx.fillText("INFO", this.canvas.width / 2, layout.titleY)
+
+        const backHovered = this.isHoveringInfoBackButton(this.mouseX, this.mouseY)
+        this.drawRoundedRectPath(
+            ctx,
+            layout.backButton.x,
+            layout.backButton.y,
+            layout.backButton.width,
+            layout.backButton.height,
+            10
+        )
+        ctx.fillStyle = backHovered ? "rgba(155,92,255,0.26)" : "rgba(58,134,255,0.20)"
+        ctx.fill()
+        this.drawRoundedRectPath(
+            ctx,
+            layout.backButton.x,
+            layout.backButton.y,
+            layout.backButton.width,
+            layout.backButton.height,
+            10
+        )
+        ctx.strokeStyle = backHovered ? "rgba(155,92,255,0.88)" : "rgba(58,134,255,0.65)"
+        ctx.lineWidth = 1.2
+        ctx.stroke()
+        ctx.fillStyle = "#eaf3ff"
+        ctx.font = "bold 14px Arial"
+        ctx.fillText(
+            "BACK",
+            layout.backButton.x + (layout.backButton.width / 2),
+            layout.backButton.y + (layout.backButton.height / 2)
+        )
+
+        ctx.save()
+        ctx.beginPath()
+        this.drawRoundedRectPath(
+            ctx,
+            layout.content.x - 10,
+            layout.content.y - 10,
+            layout.content.width + 20,
+            layout.content.height + 20,
+            12
+        )
+        ctx.clip()
+
         ctx.textAlign = "left"
+        ctx.textBaseline = "top"
+        let cursorY = layout.content.y - this.infoScroll
+        const lineHeight = 20
 
-        this.drawTitleButton(buttons.continueButton, "Continue")
-        this.drawTitleButton(buttons.newGameButton, "New Game")
-        this.drawTitleButton(buttons.resetButton, "Reset Progress", true)
+        for (const section of sections) {
+            ctx.fillStyle = "#9b5cff"
+            ctx.font = "bold 15px Arial"
+            ctx.fillText(section.title, layout.content.x, cursorY)
+            cursorY += 22
+
+            ctx.fillStyle = "rgba(230,240,255,0.9)"
+            ctx.font = "16px Arial"
+            const wrappedBody = this.wrapInfoText(ctx, section.body, layout.content.width)
+            for (const line of wrappedBody) {
+                ctx.fillText(line, layout.content.x, cursorY)
+                cursorY += lineHeight
+            }
+            cursorY += 16
+        }
+
+        ctx.restore()
+
+        const maxInfoScroll = this.getMaxInfoScroll()
+        if (maxInfoScroll > 0) {
+            const trackX = layout.content.x + layout.content.width + 10
+            const trackY = layout.content.y
+            const trackHeight = layout.content.height
+            const thumbHeight = Math.max(40, (trackHeight * trackHeight) / this.getInfoContentHeight())
+            const scrollRatio = this.infoScroll / maxInfoScroll
+            const thumbY = trackY + (trackHeight - thumbHeight) * scrollRatio
+
+            ctx.fillStyle = "rgba(255,255,255,0.12)"
+            this.drawRoundedRectPath(ctx, trackX, trackY, 6, trackHeight, 3)
+            ctx.fill()
+
+            ctx.fillStyle = "rgba(155,92,255,0.75)"
+            this.drawRoundedRectPath(ctx, trackX, thumbY, 6, thumbHeight, 3)
+            ctx.fill()
+        }
+
+        ctx.restore()
+
+    }
+
+    drawTargetIndex(ctx) {
+
+        const layout = this.getTargetIndexLayout()
+        const entries = this.getTargetIndexEntries()
+        this.clampTargetIndexScroll()
+
+        ctx.save()
+        ctx.fillStyle = "rgba(0,0,0,0.75)"
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+        const panelGradient = ctx.createLinearGradient(
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.x,
+            layout.panel.y + layout.panel.height
+        )
+        panelGradient.addColorStop(0, "rgba(20,27,46,0.94)")
+        panelGradient.addColorStop(1, "rgba(12,17,30,0.94)")
+
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.fillStyle = panelGradient
+        ctx.fill()
+
+        ctx.shadowColor = "#9b5cff"
+        ctx.shadowBlur = 18
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.strokeStyle = "rgba(155,92,255,0.55)"
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+        ctx.shadowBlur = 0
+
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillStyle = "#f0e6ff"
+        ctx.font = "bold 34px Arial"
+        ctx.fillText("TARGET INDEX", this.canvas.width / 2, layout.titleY)
+
+        const backHovered = this.isHoveringTargetIndexBackButton(this.mouseX, this.mouseY)
+        this.drawRoundedRectPath(
+            ctx,
+            layout.backButton.x,
+            layout.backButton.y,
+            layout.backButton.width,
+            layout.backButton.height,
+            10
+        )
+        ctx.fillStyle = backHovered ? "rgba(155,92,255,0.30)" : "rgba(58,134,255,0.20)"
+        ctx.fill()
+        this.drawRoundedRectPath(
+            ctx,
+            layout.backButton.x,
+            layout.backButton.y,
+            layout.backButton.width,
+            layout.backButton.height,
+            10
+        )
+        ctx.strokeStyle = backHovered ? "rgba(155,92,255,0.9)" : "rgba(58,134,255,0.65)"
+        ctx.lineWidth = 1.2
+        ctx.stroke()
+        ctx.fillStyle = "#eaf3ff"
+        ctx.font = "bold 14px Arial"
+        ctx.fillText(
+            "BACK",
+            layout.backButton.x + (layout.backButton.width / 2),
+            layout.backButton.y + (layout.backButton.height / 2)
+        )
+
+        ctx.save()
+        ctx.beginPath()
+        this.drawRoundedRectPath(
+            ctx,
+            layout.content.x - 10,
+            layout.content.y - 10,
+            layout.content.width + 20,
+            layout.content.height + 20,
+            12
+        )
+        ctx.clip()
+
+        ctx.textAlign = "left"
+        ctx.textBaseline = "middle"
+
+        const rowHeight = 34
+        let rowY = layout.content.y + 8 - this.targetIndexScroll
+
+        for (const entry of entries) {
+            const discovered = this.discoveredTargets.has(entry.id)
+
+            if (rowY + rowHeight >= layout.content.y && rowY <= layout.content.y + layout.content.height) {
+                this.drawRoundedRectPath(
+                    ctx,
+                    layout.content.x,
+                    rowY,
+                    layout.content.width,
+                    rowHeight - 4,
+                    8
+                )
+                ctx.fillStyle = discovered
+                    ? "rgba(58,134,255,0.16)"
+                    : "rgba(255,255,255,0.05)"
+                ctx.fill()
+
+                this.drawRoundedRectPath(
+                    ctx,
+                    layout.content.x,
+                    rowY,
+                    layout.content.width,
+                    rowHeight - 4,
+                    8
+                )
+                ctx.strokeStyle = discovered
+                    ? "rgba(58,134,255,0.45)"
+                    : "rgba(255,255,255,0.15)"
+                ctx.lineWidth = 1
+                ctx.stroke()
+
+                ctx.font = "bold 15px Arial"
+                ctx.fillStyle = discovered ? "#7dd3ff" : "rgba(255,255,255,0.65)"
+                ctx.fillText(
+                    discovered ? "✔ " + entry.label : "❓ Unknown",
+                    layout.content.x + 14,
+                    rowY + ((rowHeight - 4) / 2)
+                )
+            }
+
+            rowY += rowHeight
+        }
+
+        ctx.restore()
+
+        const maxTargetIndexScroll = this.getMaxTargetIndexScroll()
+        if (maxTargetIndexScroll > 0) {
+            const trackX = layout.content.x + layout.content.width + 10
+            const trackY = layout.content.y
+            const trackHeight = layout.content.height
+            const thumbHeight = Math.max(40, (trackHeight * trackHeight) / this.getTargetIndexContentHeight())
+            const scrollRatio = this.targetIndexScroll / maxTargetIndexScroll
+            const thumbY = trackY + (trackHeight - thumbHeight) * scrollRatio
+
+            ctx.fillStyle = "rgba(255,255,255,0.12)"
+            this.drawRoundedRectPath(ctx, trackX, trackY, 6, trackHeight, 3)
+            ctx.fill()
+
+            ctx.fillStyle = "rgba(155,92,255,0.75)"
+            this.drawRoundedRectPath(ctx, trackX, thumbY, 6, thumbHeight, 3)
+            ctx.fill()
+        }
+
+        ctx.restore()
 
     }
 
@@ -1922,6 +2857,7 @@ export class Game {
         const headerSpacing = 28
         const cardSpacing = 10
         const sectionX = 20
+        const { contentX, contentWidth } = this.getPanelLayoutMetrics()
         const isLayoutOnly = Boolean(this._panelLayoutOnly)
 
         this.panelHeaderButtons.push({
@@ -2156,39 +3092,51 @@ export class Game {
                 ? this.activeWorldModifiers
                 : ["none"]
             const modifiersStartY = modifiersLabelY + 20
+            const sectionTop = contentY
+            const sectionBottom = modifiersStartY + (modifierEntries.length * modifierLineHeight) + 6
+            const sectionHeight = Math.max(1, sectionBottom - sectionTop)
 
             if (!isLayoutOnly) {
+                this.ctx.save()
+                this.ctx.beginPath()
+                this.ctx.rect(contentX, sectionTop, contentWidth, sectionHeight)
+                this.ctx.clip()
+
                 this.ctx.fillStyle = "rgba(255,255,255,0.75)"
                 this.ctx.font = "16px Arial"
-                this.ctx.fillText("World Level: " + this.worldLevel, sectionX, contentY + 16)
+                this.ctx.fillText("World Level: " + this.worldLevel, contentX, contentY + 16, contentWidth)
                 this.ctx.fillText(
                     "Transport Charge: " + this.transportCharge + " / " + this.transportChargeRequired,
-                    sectionX,
-                    contentY + 38
+                    contentX,
+                    contentY + 38,
+                    contentWidth
                 )
 
                 if (this.transportAnimating) {
                     this.ctx.fillStyle = "#6d5fbf"
                     this.ctx.font = "bold 16px Arial"
-                    this.ctx.fillText("TRANSPORTING...", sectionX, statusY)
+                    this.ctx.fillText("TRANSPORTING...", contentX, statusY, contentWidth)
                 } else if (this.transportReady) {
                     this.ctx.fillStyle = "#0f6a7a"
                     this.ctx.font = "bold 16px Arial"
-                    this.ctx.fillText("ACTIVATE TRANSPORT BEAM", sectionX, statusY)
+                    this.ctx.fillText("ACTIVATE TRANSPORT BEAM", contentX, statusY, contentWidth)
                 }
 
                 this.ctx.fillStyle = "rgba(255,255,255,0.75)"
                 this.ctx.font = "14px Arial"
-                this.ctx.fillText("Modifiers:", sectionX, modifiersLabelY)
+                this.ctx.fillText("Modifiers:", contentX, modifiersLabelY, contentWidth)
 
                 this.ctx.font = "13px Arial"
                 for (let i = 0; i < modifierEntries.length; i++) {
                     this.ctx.fillText(
                         modifierEntries[i],
-                        sectionX + 10,
-                        modifiersStartY + (i * modifierLineHeight)
+                        contentX + 10,
+                        modifiersStartY + (i * modifierLineHeight),
+                        contentWidth - 10
                     )
                 }
+
+                this.ctx.restore()
             }
 
             return modifiersStartY + (modifierEntries.length * modifierLineHeight) + cardSpacing
@@ -2201,21 +3149,33 @@ export class Game {
     drawPanel() {
 
         const ctx = this.ctx
+        const panelX = 0
+        const panelWidth = this.panelWidth
+        const padding = 16
+        const contentX = panelX + padding
+        const contentWidth = panelWidth - (padding * 2)
+        this._panelLayoutMetrics = {
+            panelX,
+            panelWidth,
+            padding,
+            contentX,
+            contentWidth
+        }
 
         // Futuristic glass panel base.
         ctx.fillStyle = "#0f1118"
-        ctx.fillRect(0, 0, this.panelWidth, this.canvas.height)
+        ctx.fillRect(panelX, 0, panelWidth, this.canvas.height)
 
         // Subtle panel grid overlay.
         ctx.save()
         ctx.beginPath()
-        ctx.rect(0, 0, this.panelWidth, this.canvas.height)
+        ctx.rect(panelX, 0, panelWidth, this.canvas.height)
         ctx.clip()
         ctx.strokeStyle = "rgba(58,134,255,0.12)"
         ctx.lineWidth = 1
 
         const gridSpacing = 30
-        for (let x = 0; x <= this.panelWidth; x += gridSpacing) {
+        for (let x = panelX; x <= panelX + panelWidth; x += gridSpacing) {
             ctx.beginPath()
             ctx.moveTo(x + 0.5, 0)
             ctx.lineTo(x + 0.5, this.canvas.height)
@@ -2223,8 +3183,8 @@ export class Game {
         }
         for (let y = 0; y <= this.canvas.height; y += gridSpacing) {
             ctx.beginPath()
-            ctx.moveTo(0, y + 0.5)
-            ctx.lineTo(this.panelWidth, y + 0.5)
+            ctx.moveTo(panelX, y + 0.5)
+            ctx.lineTo(panelX + panelWidth, y + 0.5)
             ctx.stroke()
         }
         ctx.restore()
@@ -2235,19 +3195,29 @@ export class Game {
         ctx.shadowBlur = 20
         ctx.strokeStyle = "rgba(58,134,255,0.65)"
         ctx.lineWidth = 1
-        ctx.strokeRect(0.5, 0.5, this.panelWidth - 1, this.canvas.height - 1)
+        ctx.strokeRect(panelX + 0.5, 0.5, panelWidth - 1, this.canvas.height - 1)
         ctx.restore()
         this.preparePanelLayout(true)
         this.clampPanelScroll()
 
         ctx.save()
         ctx.beginPath()
-        ctx.rect(0, 0, this.panelWidth, this.canvas.height)
+        ctx.rect(panelX, 0, panelWidth, this.canvas.height)
         ctx.clip()
         ctx.translate(0, -this.panelScroll)
+        ctx.textAlign = "left"
 
-        this.drawPointsHeader(ctx)
-        this.drawOverchargeMeter(ctx)
+        const layout = this._panelLayoutMetrics || this.getPanelLayoutMetrics()
+        const headerY = 14
+        const headerHeight = 44
+        const headerGap = 8
+        const pointsWidth = Math.floor(layout.contentWidth * 0.6)
+        const overchargeWidth = layout.contentWidth - pointsWidth - headerGap
+        const pointsX = layout.contentX
+        const overchargeX = pointsX + pointsWidth + headerGap
+
+        this.drawPointsHeader(ctx, pointsX, headerY, pointsWidth, headerHeight)
+        this.drawOverchargeMeter(ctx, overchargeX, headerY, overchargeWidth, headerHeight)
         this.preparePanelLayout(false)
 
         this.drawUpgradeFlashes(ctx)
@@ -2256,28 +3226,20 @@ export class Game {
 
     }
 
-    drawPointsHeader(ctx) {
+    drawPointsHeader(ctx, x, y, width, height) {
 
-        const outerX = 20
-        const outerY = 14
-        const outerHeight = 44
-        const innerWidth = this.panelWidth - 40
-        const overchargeCardWidth = 104
-        const cardGap = 8
-        const pointsWidth = innerWidth - overchargeCardWidth - cardGap
-
-        const cardGradient = ctx.createLinearGradient(outerX, outerY, outerX, outerY + outerHeight)
+        const cardGradient = ctx.createLinearGradient(x, y, x, y + height)
         cardGradient.addColorStop(0, "rgba(58,134,255,0.20)")
         cardGradient.addColorStop(1, "rgba(58,134,255,0)")
 
         ctx.save()
-        this.drawRoundedRectPath(ctx, outerX, outerY, pointsWidth, outerHeight, 14)
+        this.drawRoundedRectPath(ctx, x, y, width, height, 14)
         ctx.fillStyle = cardGradient
         ctx.fill()
 
         ctx.shadowColor = "#3a86ff"
         ctx.shadowBlur = 25
-        this.drawRoundedRectPath(ctx, outerX, outerY, pointsWidth, outerHeight, 14)
+        this.drawRoundedRectPath(ctx, x, y, width, height, 14)
         ctx.lineWidth = 1.2
         ctx.strokeStyle = "rgba(58,134,255,0.35)"
         ctx.stroke()
@@ -2286,21 +3248,22 @@ export class Game {
         ctx.fillStyle = "rgba(202,227,255,0.9)"
         ctx.font = "bold 9px Arial"
         ctx.textBaseline = "alphabetic"
-        ctx.fillText("ENERGY POINTS", outerX + 12, outerY + 13)
+        ctx.fillText("ENERGY POINTS", x + 12, y + 13, width - 24)
 
         ctx.fillStyle = "#e8f3ff"
         ctx.font = "28px monospace"
-        ctx.fillText(String(this.points), outerX + 12, outerY + 39)
+        ctx.fillText(String(this.points), x + 12, y + 39, width - 24)
         ctx.restore()
 
     }
 
-    drawOverchargeMeter(ctx) {
+    drawOverchargeMeter(ctx, x, y, width, height) {
 
-        const cardHeight = 44
-        const cardWidth = 104
-        const cardX = this.panelWidth - 20 - cardWidth
-        const cardY = 14
+        ctx.save()
+        const cardX = x
+        const cardY = y
+        const cardWidth = width
+        const cardHeight = height
         const ratio = this.maxLaserOvercharge > 0
             ? Math.max(0, Math.min(1, this.laserOvercharge / this.maxLaserOvercharge))
             : 0
@@ -2325,12 +3288,13 @@ export class Game {
         ctx.shadowBlur = 0
         ctx.fillStyle = "rgba(238,223,255,0.95)"
         ctx.font = "bold 9px Arial"
-        ctx.fillText("OVERCHARGE", cardX + 10, cardY + 13)
+        ctx.textAlign = "left"
+        ctx.fillText("OVERCHARGE", cardX + 12, cardY + 13)
 
         ctx.textAlign = "right"
         ctx.fillStyle = "#f5ebff"
-        ctx.font = "bold 12px monospace"
-        ctx.fillText(percentText, cardX + cardWidth - 10, cardY + 13)
+        ctx.font = "bold 11px Arial"
+        ctx.fillText(percentText, cardX + cardWidth - 8, cardY + 13)
         ctx.textAlign = "left"
 
         const barX = cardX + 10
@@ -2352,6 +3316,7 @@ export class Game {
             ctx.fill()
         }
 
+        ctx.restore()
         ctx.restore()
 
     }
