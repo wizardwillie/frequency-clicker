@@ -54,12 +54,16 @@ export class Game {
         this.canvas = canvas
         this.ctx = canvas.getContext("2d")
         this.gameState = GAME_STATE_TITLE
+        this.titleInitialized = false
         this.isPaused = false
         this.showPauseMenu = false
         this.showInfoScreen = false
         this.infoScroll = 0
         this.showTargetIndex = false
         this.targetIndexScroll = 0
+        this.titleLasers = []
+        this.titleTargets = []
+        this.titleTimer = 0
         this.musicTracks = [
             "assets/audio/meadow music 7.wav",
             "assets/audio/meadow music 1.wav",
@@ -71,6 +75,7 @@ export class Game {
             "assets/audio/meadow music 8.wav",
             "assets/audio/gnomeforest.wav"
         ]
+        this.musicQueue = []
         this.currentMusic = null
         this.isMuted = false
         this.audioUnlocked = false
@@ -97,6 +102,20 @@ export class Game {
         this.targets = []
         this.lasers = []
         this.floatingTexts = []
+        this.titleLasers = []
+        this.titleTargets = []
+        this.titleTimer = 0
+        this._titleLaserSpawnAccumulator = 0
+        this._titleTargetSpawnAccumulator = 0
+        this.titleHeroLaser = {
+            phase: 0,
+            frequency: 0.006,
+            amplitude: 34,
+            width: 4,
+            colorA: "#3a86ff",
+            colorB: "#9b5cff",
+            centerY: 305
+        }
         this.discoveredTargets = new Set()
         this.simpleLaserCost = SIMPLE_LASER_COST
         this.autoFireCost = AUTO_FIRE_COST
@@ -320,7 +339,12 @@ export class Game {
 
         if (this.isMuted) return
 
-        const track = this.musicTracks[Math.floor(Math.random() * this.musicTracks.length)]
+        if (this.musicQueue.length === 0) {
+            this.musicQueue = [...this.musicTracks]
+        }
+
+        const index = Math.floor(Math.random() * this.musicQueue.length)
+        const track = this.musicQueue.splice(index, 1)[0]
 
         if (this.currentMusic) {
             this.currentMusic.pause()
@@ -1073,8 +1097,14 @@ export class Game {
         const x = (this.canvas.width / 2) - (buttonWidth / 2)
         const startY = (this.canvas.height / 2) + 16
         const buttons = []
+        let hasSave = null
+        try {
+            hasSave = localStorage.getItem("frequencyLaserClickerSave")
+        } catch {
+            hasSave = null
+        }
 
-        if (this.hasSaveGame) {
+        if (hasSave) {
             buttons.push({
                 id: "continue",
                 label: "Continue Game",
@@ -1174,6 +1204,7 @@ export class Game {
 
         if (clickedButton.id === "start") {
             this.gameState = GAME_STATE_PLAYING
+            this.musicQueue = []
             this.showInfoScreen = false
             this.showTargetIndex = false
             if (!this.audioUnlocked) {
@@ -1318,9 +1349,16 @@ export class Game {
             this.showPauseMenu = false
             this.isPaused = false
             this.gameState = GAME_STATE_TITLE
+            this.saveSystemLoaded = false
+            this.hasLaser = false
             if (this.currentMusic) {
                 this.currentMusic.pause()
             }
+            this.showInfoScreen = false
+            this.showTargetIndex = false
+            this.isPaused = false
+            this.currentMusic = null
+            this.titleInitialized = false
         }
 
     }
@@ -1364,32 +1402,64 @@ export class Game {
 
         return [
             {
-                title: "GAMEPLAY",
-                body: "Click targets to earn energy points."
+                title: "GAME OVERVIEW",
+                body: "Frequency Clicker is an arcade-incremental game where you destroy drifting targets, earn energy points, unlock new laser types, and evolve your build across multiple worlds. Each run starts simple, but quickly expands into faster fire rates, stronger beams, rare targets, mastery upgrades, and world-based modifiers."
+            },
+            {
+                title: "CORE LOOP",
+                body: "Destroy targets to earn Energy Points. Spend Energy Points on new lasers, laser stat upgrades, target economy upgrades, automation systems, and mastery upgrades. As you grow stronger, you charge the Transport Beam and travel to new worlds, where progression resets but your long-term world scaling continues."
+            },
+            {
+                title: "CONTROLS",
+                body: "Click targets to damage them directly. Click the grid to fire your equipped laser. Use the mouse wheel over the panel to scroll upgrades. Press Escape to open the pause menu."
+            },
+            {
+                title: "ENERGY POINTS",
+                body: "Energy Points are the main currency used for progression. You earn them by destroying targets. Stronger and rarer targets reward more points. As you advance worlds, your permanent world multiplier increases, making future runs more rewarding."
             },
             {
                 title: "LASERS",
-                body: "Each laser type behaves differently."
+                body: "Simple Laser is your balanced starter beam. Plasma Laser offers stronger output. Pulse Laser specializes in pulse-based effects. Scatter Laser spreads damage across multiple beams. Heavy Laser is slower but far more destructive."
             },
             {
-                title: "UPGRADES",
-                body: "Improve laser stats and economy systems."
+                title: "LASER UPGRADES",
+                body: "Frequency changes wave density and improves coverage. Amplitude increases wave height, helping reach more targets. Fire Rate increases how often lasers can fire. Laser Strength increases damage per hit. Different laser types scale differently, so switching weapons can change your optimal build."
             },
             {
-                title: "TARGETS",
-                body: "Different enemies require different strategies."
+                title: "LASER MASTERY",
+                body: "Mastery upgrades unlock deeper specialization for advanced lasers. Pulse Mastery improves pulse shockwave radius. Scatter Mastery increases scatter beam count. Heavy Mastery increases heavy laser piercing power. Mastery upgrades are tied to their specific weapon types and appear only after unlocking those lasers."
+            },
+            {
+                title: "TARGET ECONOMY",
+                body: "Target Value increases point income. Spawn Rate increases target pressure and earning potential. Target Diversity unlocks additional enemy types and more complex encounters. Click Damage improves your direct click damage against targets."
+            },
+            {
+                title: "AUTOMATION",
+                body: "Auto Fire automatically fires your laser over time. Fire Rate upgrades make automation more effective. Automation becomes especially valuable during longer runs and faster world progression."
+            },
+            {
+                title: "TARGET TYPES",
+                body: "The battlefield contains many enemy classes, including basic, armored, reinforced, heavy, shielded, reflector, splitter, fragment, phase, charger, boss, and rare targets such as Golden, Phantom, and Ancient. Use the Target Index to track what you have discovered."
             },
             {
                 title: "WORLDS",
-                body: "Transport beams allow travel to new worlds."
+                body: "Worlds act like progression layers beyond a single build. When you advance to a new world, your short-term progression resets, new pacing and challenge rules can appear, and your permanent world scaling improves. This creates a prestige-style loop where each new world becomes faster, richer, and more varied."
             },
             {
                 title: "TRANSPORT BEAM",
-                body: "Charge the beam by defeating enemies."
+                body: "Defeated enemies charge the Transport Beam. Once fully charged, the beam becomes available for world travel. Activating it moves you into the next world and begins the next phase of progression."
+            },
+            {
+                title: "WORLD MODIFIERS",
+                body: "World modifiers alter the feel of a run and add variety. Some increase target pressure, some add chain effects, some change movement behavior, and others create more chaotic encounters. Modifiers help each world feel distinct."
+            },
+            {
+                title: "STARTER STRATEGY",
+                body: "A strong early path is to unlock your first laser quickly, improve target value and frequency, build toward fire rate and automation, unlock stronger lasers as soon as possible, and then use mastery upgrades to specialize your preferred weapon."
             },
             {
                 title: "LORE",
-                body: "In the distant future, scientists weaponized energy frequencies to defend humanity from dimensional swarms."
+                body: "Humanity discovered that certain waveforms could destabilize hostile dimensional matter. What began as signal research became weapon science. Now the grid is a battlefield, lasers are tuned like instruments, and each world you breach reveals a deeper, stranger layer of the frequency war."
             }
         ]
 
@@ -2214,6 +2284,11 @@ export class Game {
 
     update(delta) {
 
+        if (this.gameState === GAME_STATE_TITLE) {
+            this.updateTitleScene(delta)
+            return
+        }
+
         if (this.gameState !== GAME_STATE_PLAYING) {
             return
         }
@@ -2338,6 +2413,33 @@ export class Game {
     render() {
 
         if (this.gameState === GAME_STATE_TITLE) {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+
+            const titleBgGradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height)
+            titleBgGradient.addColorStop(0, "#050914")
+            titleBgGradient.addColorStop(1, "#0b1020")
+            this.ctx.fillStyle = titleBgGradient
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+            this.ctx.save()
+            this.ctx.strokeStyle = "rgba(58,134,255,0.12)"
+            this.ctx.lineWidth = 1
+            const titleGridSpacing = 42
+            for (let x = 0; x <= this.canvas.width; x += titleGridSpacing) {
+                this.ctx.beginPath()
+                this.ctx.moveTo(x + 0.5, 0)
+                this.ctx.lineTo(x + 0.5, this.canvas.height)
+                this.ctx.stroke()
+            }
+            for (let y = 0; y <= this.canvas.height; y += titleGridSpacing) {
+                this.ctx.beginPath()
+                this.ctx.moveTo(0, y + 0.5)
+                this.ctx.lineTo(this.canvas.width, y + 0.5)
+                this.ctx.stroke()
+            }
+            this.ctx.restore()
+
+            this.drawTitleScene(this.ctx)
             this.drawTitleScreen(this.ctx)
             if (this.showInfoScreen) {
                 this.drawInfoScreen(this.ctx)
@@ -2515,6 +2617,80 @@ export class Game {
 
     }
 
+    updateTitleScene(delta) {
+
+        this.titleTimer += delta
+
+        if (!this.titleHeroLaser) {
+            this.titleHeroLaser = {
+                phase: 0,
+                frequency: 0.006,
+                amplitude: 34,
+                width: 4,
+                colorA: "#3a86ff",
+                colorB: "#9b5cff",
+                centerY: 305
+            }
+        }
+
+        this.titleHeroLaser.phase += delta * 2.4
+        this.titleHeroLaser._animatedAmplitude =
+            this.titleHeroLaser.amplitude * (1 + (Math.sin(this.titleTimer * 1.35) * 0.18))
+        this.titleHeroLaser._animatedWidth =
+            this.titleHeroLaser.width * (1 + (Math.sin((this.titleTimer * 1.05) + 1.2) * 0.2))
+        this.titleTargets = []
+
+    }
+
+    drawTitleScene(ctx) {
+
+        ctx.save()
+
+        const hero = this.titleHeroLaser
+        if (hero) {
+            const startX = 24
+            const endX = this.canvas.width - 24
+            const amplitude = hero._animatedAmplitude ?? hero.amplitude
+            const beamWidth = hero._animatedWidth ?? hero.width
+
+            ctx.beginPath()
+            const startY = hero.centerY + Math.sin((startX * hero.frequency) + hero.phase) * amplitude
+            ctx.moveTo(startX, startY)
+            for (let x = startX; x <= endX; x += 5) {
+                const y = hero.centerY + Math.sin((x * hero.frequency) + hero.phase) * amplitude
+                ctx.lineTo(x, y)
+            }
+
+            const beamGradient = ctx.createLinearGradient(startX, 0, endX, 0)
+            beamGradient.addColorStop(0, hero.colorA)
+            beamGradient.addColorStop(1, hero.colorB)
+
+            ctx.save()
+            ctx.lineCap = "round"
+            ctx.globalCompositeOperation = "lighter"
+
+            ctx.globalAlpha = 0.08
+            ctx.strokeStyle = hero.colorB
+            ctx.lineWidth = beamWidth * 8
+            ctx.stroke()
+
+            ctx.globalAlpha = 0.2
+            ctx.strokeStyle = hero.colorA
+            ctx.lineWidth = beamWidth * 3.2
+            ctx.stroke()
+
+            ctx.globalCompositeOperation = "source-over"
+            ctx.globalAlpha = 0.96
+            ctx.strokeStyle = beamGradient
+            ctx.lineWidth = beamWidth
+            ctx.stroke()
+            ctx.restore()
+        }
+
+        ctx.restore()
+
+    }
+
     drawTitleButton(button, label, isDanger = false) {
 
         const ctx = this.ctx
@@ -2541,32 +2717,6 @@ export class Game {
         const buttons = this.getTitleButtons()
         const centerX = this.canvas.width / 2
         const pulse = 0.5 + Math.sin(performance.now() * 0.002) * 0.5
-
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
-
-        const bgGradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height)
-        bgGradient.addColorStop(0, "#050914")
-        bgGradient.addColorStop(1, "#0b1020")
-        ctx.fillStyle = bgGradient
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
-
-        ctx.save()
-        ctx.strokeStyle = "rgba(58,134,255,0.12)"
-        ctx.lineWidth = 1
-        const spacing = 42
-        for (let x = 0; x <= this.canvas.width; x += spacing) {
-            ctx.beginPath()
-            ctx.moveTo(x + 0.5, 0)
-            ctx.lineTo(x + 0.5, this.canvas.height)
-            ctx.stroke()
-        }
-        for (let y = 0; y <= this.canvas.height; y += spacing) {
-            ctx.beginPath()
-            ctx.moveTo(0, y + 0.5)
-            ctx.lineTo(this.canvas.width, y + 0.5)
-            ctx.stroke()
-        }
-        ctx.restore()
 
         ctx.save()
         ctx.textAlign = "center"
