@@ -83,6 +83,26 @@ const TARGET_PHASE_DURATION = 2.2
 const TARGET_CHARGER_COOLDOWN = 2.8
 const TARGET_CHARGER_BURST_DURATION = 0.48
 const TARGET_CHARGER_BURST_MULTIPLIER = 3.1
+const TARGET_HEALER_CHANCE = 0.02
+const TARGET_EXPLODER_CHANCE = 0.02
+const TARGET_CRYSTAL_CHANCE = 0.012
+const TARGET_ELITE_CHANCE = 0.04
+const TARGET_HEALER_HEALTH = 10
+const TARGET_EXPLODER_HEALTH = 14
+const TARGET_CRYSTAL_HEALTH = 28
+const TARGET_ELITE_HEALTH = 18
+const TARGET_HEALER_RADIUS = 14
+const TARGET_EXPLODER_RADIUS = 16
+const TARGET_CRYSTAL_RADIUS = 20
+const TARGET_ELITE_RADIUS = 18
+const TARGET_HEALER_VALUE_MULTIPLIER = 7
+const TARGET_EXPLODER_VALUE_MULTIPLIER = 8
+const TARGET_CRYSTAL_VALUE_MULTIPLIER = 10
+const TARGET_ELITE_VALUE_MULTIPLIER = 9
+const TARGET_HEALER_SPEED_MULTIPLIER = 0.78
+const TARGET_EXPLODER_SPEED_MULTIPLIER = 1.02
+const TARGET_CRYSTAL_SPEED_MULTIPLIER = 0.7
+const TARGET_ELITE_SPEED_MULTIPLIER = 1.08
 
 export class SpawnSystem {
 
@@ -231,6 +251,26 @@ export class SpawnSystem {
                 unlocked: isTargetAllowed("heavy") && diversityLevel >= TARGET_HEAVY_UNLOCK_LEVEL
             },
             {
+                type: "healer",
+                chance: TARGET_HEALER_CHANCE,
+                unlocked: isTargetAllowed("healer")
+            },
+            {
+                type: "exploder",
+                chance: TARGET_EXPLODER_CHANCE,
+                unlocked: isTargetAllowed("exploder")
+            },
+            {
+                type: "crystal",
+                chance: TARGET_CRYSTAL_CHANCE,
+                unlocked: isTargetAllowed("crystal")
+            },
+            {
+                type: "elite",
+                chance: TARGET_ELITE_CHANCE,
+                unlocked: isTargetAllowed("elite")
+            },
+            {
                 type: "phase",
                 chance: TARGET_PHASE_CHANCE,
                 unlocked: isTargetAllowed("phase")
@@ -367,6 +407,26 @@ export class SpawnSystem {
             maxHealth = TARGET_HEAVY_HEALTH
             radius = TARGET_HEAVY_RADIUS
             speed = baseSpeed * TARGET_HEAVY_SPEED_MULTIPLIER
+        } else if (type === "healer") {
+            valueMultiplier = TARGET_HEALER_VALUE_MULTIPLIER
+            maxHealth = TARGET_HEALER_HEALTH
+            radius = TARGET_HEALER_RADIUS
+            speed = baseSpeed * TARGET_HEALER_SPEED_MULTIPLIER
+        } else if (type === "exploder") {
+            valueMultiplier = TARGET_EXPLODER_VALUE_MULTIPLIER
+            maxHealth = TARGET_EXPLODER_HEALTH
+            radius = TARGET_EXPLODER_RADIUS
+            speed = baseSpeed * TARGET_EXPLODER_SPEED_MULTIPLIER
+        } else if (type === "crystal") {
+            valueMultiplier = TARGET_CRYSTAL_VALUE_MULTIPLIER
+            maxHealth = TARGET_CRYSTAL_HEALTH
+            radius = TARGET_CRYSTAL_RADIUS
+            speed = baseSpeed * TARGET_CRYSTAL_SPEED_MULTIPLIER
+        } else if (type === "elite") {
+            valueMultiplier = TARGET_ELITE_VALUE_MULTIPLIER
+            maxHealth = TARGET_ELITE_HEALTH
+            radius = TARGET_ELITE_RADIUS
+            speed = baseSpeed * TARGET_ELITE_SPEED_MULTIPLIER
         } else if (type === "phase") {
             valueMultiplier = TARGET_PHASE_VALUE_MULTIPLIER
             maxHealth = TARGET_PHASE_HEALTH
@@ -440,10 +500,15 @@ export class SpawnSystem {
         speed *= worldSpeedMultiplier
 
         const target = new Target(0, 0, direction, speed, value, {
+            game: this.game,
             type,
             maxHealth,
             radius,
             hasShield,
+            isHealer: type === "healer",
+            isExploder: type === "exploder",
+            isCrystal: type === "crystal",
+            isElite: type === "elite",
             phaseDuration,
             phaseTimer,
             isPhased,

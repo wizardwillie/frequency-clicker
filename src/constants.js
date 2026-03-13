@@ -2,13 +2,16 @@ export const SIMPLE_LASER_COST = 10
 export const AUTO_FIRE_COST = 250
 export const AUTO_FIRE_SPEED_MULTIPLIER = 1.6
 export const BASE_MANUAL_FIRE_COOLDOWN = 0.15
-export const DEV_STARTING_POINTS = 0
+export const DEV_STARTING_POINTS = 1000000
 export const GAME_STATE_TITLE = "title"
 export const GAME_STATE_PLAYING = "playing"
+export const GAME_STATE_BOSS = "boss"
 export const WORLD_START_LEVEL = 1
 export const WORLD_POINT_MULTIPLIER_BASE = 1
 export const WORLD_POINT_MULTIPLIER_GROWTH = 1.5
-export const TRANSPORT_INITIAL_CHARGE_REQUIRED = 10000
+export const WORLD_GATE_BASE_COST = 10
+export const WORLD_GATE_COST_GROWTH = 2.25
+export const TRANSPORT_INITIAL_CHARGE_REQUIRED = 10
 export const TRANSPORT_CHARGE_PER_KILL = 1
 export const TRANSPORT_BOSS_CHARGE_BONUS = 20
 export const TRANSPORT_CHARGE_GROWTH = 2
@@ -16,15 +19,35 @@ export const WORLD_SPAWN_RATE_GROWTH = 1.35
 export const WORLD_DATA = {
     1: {
         name: "Neon Grid",
+        subtitle: "Signal Calibration Zone",
         gridColor: "#2a5fff",
         particleColor: "#00aaff",
-        targets: ["basic", "armored", "shielded", "heavy"]
+        targets: ["basic", "highValue", "fast", "armored", "reinforced", "shielded"],
+        description: "The baseline simulation where wave control first stabilizes under pressure."
     },
     2: {
         name: "Plasma Storm",
+        subtitle: "Unstable Charge Fields",
         gridColor: "#a03bff",
         particleColor: "#ff66ff",
-        targets: ["phase", "charger", "reflector", "splitter"]
+        targets: ["phase", "charger", "reflector", "splitter", "healer", "exploder"],
+        description: "Erratic plasma surges distort trajectories and reward reactive play."
+    },
+    3: {
+        name: "Cryo Circuit",
+        subtitle: "Frozen Signal Lattice",
+        gridColor: "#66c7ff",
+        particleColor: "#9ee6ff",
+        targets: ["crystal", "shielded", "armored", "elite", "healer"],
+        description: "Frozen conduits harden enemy shells, forcing sustained precision fire."
+    },
+    4: {
+        name: "Void Pulse",
+        subtitle: "Dimensional Frequency Collapse",
+        gridColor: "#7b4dff",
+        particleColor: "#c38bff",
+        targets: ["phantom", "ancient", "elite", "phase", "heavy", "boss"],
+        description: "Collapsed dimensions leak elite signatures and catastrophic pulse events."
     }
 }
 export const WORLD_UPGRADE_TREES = {

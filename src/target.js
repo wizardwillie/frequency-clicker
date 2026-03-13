@@ -12,6 +12,17 @@ export class Target {
         this.type = options.type || "basic"
         this.value = value
         this.maxHealth = options.maxHealth ?? 1
+        this.isHealer = options.isHealer ?? this.type === "healer"
+        this.isExploder = options.isExploder ?? this.type === "exploder"
+        this.isCrystal = options.isCrystal ?? this.type === "crystal"
+        this.isElite = options.isElite ?? this.type === "elite"
+        this.healPulseCooldown = options.healPulseCooldown ?? 1.6
+        this.healPulseTimer = options.healPulseTimer ?? (Math.random() * this.healPulseCooldown)
+        this.healRadius = options.healRadius ?? 120
+        this.healAmount = options.healAmount ?? 1
+        this.crystalDamageMultiplier = options.crystalDamageMultiplier ?? 0.55
+        this.exploderBurstRadius = options.exploderBurstRadius ?? 120
+        this.exploderBurstDamage = options.exploderBurstDamage ?? 2
         this.phaseTimer = options.phaseTimer ?? 0
         this.phaseDuration = options.phaseDuration ?? 2.2
         this.isPhased = options.isPhased ?? false
@@ -28,6 +39,10 @@ export class Target {
             armored: 18,
             reinforced: 22,
             heavy: 26,
+            healer: 14,
+            exploder: 16,
+            crystal: 20,
+            elite: 18,
             shielded: 15,
             reflector: 18,
             splitter: 20,
@@ -45,11 +60,24 @@ export class Target {
         Object.defineProperty(this, "health", {
             get: () => this._health,
             set: (value) => {
-                const nextHealth = Math.max(0, value)
-                if (this.type === "phase" && this.isPhased && nextHealth < this._health) {
+                const previousHealth = this._health
+                let nextHealth = Math.max(0, value)
+
+                if (this.type === "phase" && this.isPhased && nextHealth < previousHealth) {
                     return
                 }
+
+                if (this.isCrystal && nextHealth < previousHealth) {
+                    const incomingDamage = previousHealth - nextHealth
+                    const reducedDamage = incomingDamage * this.crystalDamageMultiplier
+                    nextHealth = Math.max(0, previousHealth - reducedDamage)
+                }
+
                 this._health = nextHealth
+
+                if (this.isExploder && previousHealth > 0 && nextHealth <= 0) {
+                    this.triggerExploderBurst()
+                }
             }
         })
         this.hitFlashDuration = 0.12
@@ -68,6 +96,14 @@ export class Target {
         }
 
         let moveSpeed = this.speed
+
+        if (this.isHealer && this.game) {
+            this.healPulseTimer += delta
+            if (this.healPulseTimer >= this.healPulseCooldown) {
+                this.healPulseTimer -= this.healPulseCooldown
+                this.healNearbyTargets()
+            }
+        }
 
         if (this.type === "phase") {
             this.phaseTimer += delta
@@ -203,6 +239,38 @@ export class Target {
             healthBarBackground = "#2f1a1a"
             healthBarFill = "#ff7a7a"
             drawStroke = true
+        } else if (this.type === "healer") {
+            fillColor = "#4ae486"
+            strokeColor = "#1f6d3a"
+            strokeWidth = 3
+            coreColor = "#d8ffe8"
+            healthBarBackground = "#1b3326"
+            healthBarFill = "#93ffbc"
+            drawStroke = true
+        } else if (this.type === "exploder") {
+            fillColor = "#ff7a3d"
+            strokeColor = "#73240d"
+            strokeWidth = 3
+            coreColor = "#ffd2b3"
+            healthBarBackground = "#3a1f16"
+            healthBarFill = "#ffad7f"
+            drawStroke = true
+        } else if (this.type === "crystal") {
+            fillColor = "#52c8ff"
+            strokeColor = "#1e4f92"
+            strokeWidth = 4
+            coreColor = "#dbf3ff"
+            healthBarBackground = "#182b46"
+            healthBarFill = "#8ed8ff"
+            drawStroke = true
+        } else if (this.type === "elite") {
+            fillColor = "#a86cff"
+            strokeColor = "#4f2a8c"
+            strokeWidth = 3
+            coreColor = "#e6d3ff"
+            healthBarBackground = "#24173b"
+            healthBarFill = "#c9a5ff"
+            drawStroke = true
         } else if (this.type === "shielded") {
             fillColor = this.hasShield ? "#4aa0ff" : "#2f6fd6"
             strokeColor = "#1c4f9e"
@@ -289,6 +357,14 @@ export class Target {
             fillColor = "#f0a3ff"
         } else if (this.hitFlashTime > 0 && this.type === "heavy") {
             fillColor = "#d97171"
+        } else if (this.hitFlashTime > 0 && this.type === "healer") {
+            fillColor = "#a8ffd1"
+        } else if (this.hitFlashTime > 0 && this.type === "exploder") {
+            fillColor = "#ffc39f"
+        } else if (this.hitFlashTime > 0 && this.type === "crystal") {
+            fillColor = "#bde7ff"
+        } else if (this.hitFlashTime > 0 && this.type === "elite") {
+            fillColor = "#d9baff"
         } else if (this.hitFlashTime > 0 && this.type === "shielded") {
             fillColor = this.hasShield ? "#9cd1ff" : "#7bb0ff"
         } else if (this.hitFlashTime > 0 && this.type === "reflector") {
@@ -432,6 +508,47 @@ export class Target {
             ctx.fillStyle = healthBarFill
             ctx.fillRect(barX, barY, barWidth * healthRatio, barHeight)
 
+        }
+
+    }
+
+    healNearbyTargets() {
+
+        if (!this.game || !Array.isArray(this.game.targets)) return
+
+        for (const target of this.game.targets) {
+            if (!target || target === this || target.health <= 0) continue
+            if (target.health >= target.maxHealth) continue
+
+            const dx = target.x - this.x
+            const dy = target.y - this.y
+            const distance = Math.sqrt((dx * dx) + (dy * dy))
+            if (distance > this.healRadius) continue
+
+            target.health = Math.min(target.maxHealth, target.health + this.healAmount)
+            if (target.hitFlashDuration) {
+                target.hitFlashTime = Math.max(target.hitFlashTime || 0, target.hitFlashDuration * 0.5)
+            }
+        }
+
+    }
+
+    triggerExploderBurst() {
+
+        if (!this.game || !Array.isArray(this.game.targets)) return
+
+        for (const target of this.game.targets) {
+            if (!target || target === this || target.health <= 0) continue
+
+            const dx = target.x - this.x
+            const dy = target.y - this.y
+            const distance = Math.sqrt((dx * dx) + (dy * dy))
+            if (distance > this.exploderBurstRadius) continue
+
+            target.health = Math.max(0, target.health - this.exploderBurstDamage)
+            if (target.hitFlashDuration) {
+                target.hitFlashTime = target.hitFlashDuration
+            }
         }
 
     }
