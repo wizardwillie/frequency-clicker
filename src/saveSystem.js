@@ -36,6 +36,8 @@ export class SaveSystem {
             currentLaserType: this.game.currentLaserType,
             worldLevel: this.game.worldLevel,
             worldPointMultiplier: this.game.worldPointMultiplier,
+            coreFragments: this.game.coreFragments ?? 0,
+            progressMatrixPurchased: [...(this.game.progressMatrixPurchased || new Set())],
             transportCharge: this.game.transportCharge,
             transportChargeRequired: this.game.transportChargeRequired,
             autoFire: {
@@ -125,6 +127,15 @@ export class SaveSystem {
                 WORLD_POINT_MULTIPLIER_BASE,
                 this.readNumber(saveData.worldPointMultiplier, WORLD_POINT_MULTIPLIER_BASE)
             )
+            this.game.coreFragments = Math.max(
+                0,
+                this.readNumber(saveData.coreFragments, 0)
+            )
+            this.game.progressMatrixPurchased = new Set(
+                Array.isArray(saveData.progressMatrixPurchased)
+                    ? saveData.progressMatrixPurchased
+                    : []
+            )
             this.game.transportChargeRequired = Math.max(
                 1,
                 this.readNumber(saveData.transportChargeRequired, TRANSPORT_INITIAL_CHARGE_REQUIRED)
@@ -182,6 +193,13 @@ export class SaveSystem {
     reset() {
 
         try {
+            const preservedCoreFragments = Math.max(0, this.readNumber(this.game.coreFragments, 0))
+            const preservedProgressMatrix = new Set(
+                this.game.progressMatrixPurchased instanceof Set
+                    ? [...this.game.progressMatrixPurchased]
+                    : []
+            )
+
             localStorage.removeItem(this.saveKey)
 
             if (typeof this.game.setPointsRaw === "function") {
@@ -219,6 +237,8 @@ export class SaveSystem {
             this.game.scatterMasteryLevel = 0
             this.game.heavyMasteryLevel = 0
             this.game.discoveredTargets = new Set()
+            this.game.coreFragments = preservedCoreFragments
+            this.game.progressMatrixPurchased = preservedProgressMatrix
 
             this.game.laserOvercharge = 0
             this.game.laserTypeStats = this.game.createLaserTypeStats()
@@ -226,6 +246,8 @@ export class SaveSystem {
             if (this.game.upgradeSystem && typeof this.game.upgradeSystem.refreshMasteryEffects === "function") {
                 this.game.upgradeSystem.refreshMasteryEffects()
             }
+
+            this.save()
 
             return true
         } catch (error) {

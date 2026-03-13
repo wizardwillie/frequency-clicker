@@ -26,12 +26,17 @@ import {
     WORLD_POINT_MULTIPLIER_GROWTH,
     WORLD_GATE_BASE_COST,
     WORLD_GATE_COST_GROWTH,
+    BOSS_PREP_SHIELD_COST,
+    BOSS_PREP_OVERCHARGER_COST,
+    BOSS_PREP_STABILIZER_COST,
     TRANSPORT_INITIAL_CHARGE_REQUIRED,
     TRANSPORT_CHARGE_GROWTH,
     WORLD_SPAWN_RATE_GROWTH,
     WORLD_DATA,
+    WORLD_BOSS_DATA,
     WORLD_UPGRADE_TREES,
     WORLD_MODIFIERS,
+    PROGRESS_MATRIX_NODES,
     SCATTER_BASE_BEAM_COUNT,
     HEAVY_BASE_PIERCE_COUNT,
     PULSE_SHOCKWAVE_BASE_RADIUS
@@ -64,6 +69,8 @@ export class Game {
         this.infoScroll = 0
         this.showTargetIndex = false
         this.targetIndexScroll = 0
+        this.showProgressMatrix = false
+        this.showArchivesMenu = false
         this.titleLasers = []
         this.titleTargets = []
         this.titleTimer = 0
@@ -88,6 +95,9 @@ export class Game {
         this.transportChargeRequired = TRANSPORT_INITIAL_CHARGE_REQUIRED
         this.transportReady = false
         this.worldGatePurchased = false
+        this.bossPrepShield = false
+        this.bossPrepOvercharger = false
+        this.bossPrepStabilizer = false
         this.transportAnimating = false
         this.transportAnimationTime = 0
         this.transportAnimationDuration = 1.2
@@ -98,24 +108,65 @@ export class Game {
         this.bossFightTimer = 0
         this.bossFightTimeLimit = 20
         this.bossTargetWorld = null
+        this.activeBossConfig = null
         this.bossLaserY = this.canvas.height / 2
         this.bossLaserMinY = 60
         this.bossLaserMaxY = this.canvas.height - 60
         this.bossLaserCooldown = 0.18
         this.bossLaserCooldownTimer = 0
         this.bossShotFlashTime = 0
+        this.bossWeaponType = "simple"
+        this.bossWeaponDamage = 1
+        this.bossWeaponCooldownBase = 0.18
+        this.bossWeaponHitWindow = 80
+        this.bossWeaponColor = "#3a86ff"
+        this.bossBeamVisualWidth = 3
+        this.bossBeamVisualGlow = 1
+        this.bossBeamVisualPhase = 0
+        this.bossBeamVisualAmplitude = 0
+        this.bossBeamVisualFrequency = 0
+        this.bossBeamVisualScatterCount = 1
+        this.bossBeamVisualColorPrimary = "#3a86ff"
+        this.bossBeamVisualColorSecondary = "#d9f6ff"
         this.bossProjectiles = []
         this.bossAttackTimer = 0
         this.bossAttackCooldown = 1.25
         this.bossPlayerHits = 0
         this.bossMaxPlayerHits = 3
         this.bossHitFlashTime = 0
+        this.bossHazardLanes = []
+        this.bossHazardTimer = 0
+        this.bossPhase = 1
+        this.bossPhaseChoiceActive = false
+        this.bossPhaseTwoChoiceGiven = false
+        this.bossPhaseThreeChoiceGiven = false
+        this.bossPhaseChoices = []
+        this.bossPhaseBuffDamage = 0
+        this.bossPhaseBuffHitWindow = 0
+        this.bossPhaseBuffCooldownMultiplier = 1
+        this.bossPhaseBuffExtraLives = 0
         this.activeWorldModifiers = []
         this.gravityWells = []
         this.gravityWellTimer = 0
 
         this.lastTime = 0
         this.worldPointMultiplier = WORLD_POINT_MULTIPLIER_BASE
+        this.coreFragments = 0
+        this.progressMatrixPurchased = new Set()
+        this.showBalanceOverlay = false
+        this.runTime = 0
+        this.runPointsEarned = 0
+        this.runKills = 0
+        this.runBossAttempts = 0
+        this.runBossWins = 0
+        this.runBossLosses = 0
+        this.runCoreFragmentsEarned = 0
+        this.firstLaserUnlockTime = null
+        this.transportReadyTime = null
+        this.worldGateAffordableTime = null
+        this.lastBalanceSampleTime = 0
+        this.recentDamageDealt = 0
+        this.recentDamageWindow = 0
         this._points = 0
         this.configurePointAccessors()
         this.setPointsRaw(DEV_STARTING_POINTS)
@@ -321,6 +372,24 @@ export class Game {
             width: this.panelWidth - 40,
             height: 26
         }
+        this.bossPrepShieldButton = {
+            x: 20,
+            y: this.worldGatePurchaseButton.y + 36,
+            width: this.panelWidth - 40,
+            height: 30
+        }
+        this.bossPrepOverchargerButton = {
+            x: 20,
+            y: this.bossPrepShieldButton.y + 38,
+            width: this.panelWidth - 40,
+            height: 30
+        }
+        this.bossPrepStabilizerButton = {
+            x: 20,
+            y: this.bossPrepOverchargerButton.y + 38,
+            width: this.panelWidth - 40,
+            height: 30
+        }
         this.worldSectionY = this.autoFireButton.y + 76
         this.panelHeaderButtons = []
         this.panelContentHeight = this.canvas.height
@@ -361,8 +430,16 @@ export class Game {
             this.handleWheel(event)
         }, { passive: false })
         window.addEventListener("keydown", (event) => {
+            if (event.key === "F8") {
+                this.showBalanceOverlay = !this.showBalanceOverlay
+                return
+            }
             if (event.key !== "Escape") return
             if (event.repeat) return
+            if (this.showArchivesMenu) {
+                this.showArchivesMenu = false
+                return
+            }
             if (this.gameState !== GAME_STATE_PLAYING) return
             if (this.showTargetIndex) {
                 this.showTargetIndex = false
@@ -370,6 +447,10 @@ export class Game {
             }
             if (this.showInfoScreen) {
                 this.showInfoScreen = false
+                return
+            }
+            if (this.showProgressMatrix) {
+                this.showProgressMatrix = false
                 return
             }
             this.togglePauseMenu()
@@ -445,7 +526,9 @@ export class Game {
                 if (numericValue > this._points) {
                     const rawGain = numericValue - this._points
                     const scaledGain = Math.floor(rawGain * this.worldPointMultiplier)
-                    this._points += Math.max(0, scaledGain)
+                    const normalizedGain = Math.max(0, scaledGain)
+                    this._points += normalizedGain
+                    this.runPointsEarned += normalizedGain
                     return
                 }
 
@@ -459,6 +542,58 @@ export class Game {
 
         const numericValue = Number.isFinite(value) ? value : 0
         this._points = Math.max(0, Math.floor(numericValue))
+
+    }
+
+    resetRunTelemetry() {
+
+        this.runTime = 0
+        this.runPointsEarned = 0
+        this.runKills = 0
+        this.runBossAttempts = 0
+        this.runBossWins = 0
+        this.runBossLosses = 0
+        this.runCoreFragmentsEarned = 0
+        this.firstLaserUnlockTime = null
+        this.transportReadyTime = null
+        this.worldGateAffordableTime = null
+        this.lastBalanceSampleTime = 0
+        this.recentDamageDealt = 0
+        this.recentDamageWindow = 0
+
+    }
+
+    recordDamageDealt(amount) {
+
+        if (!Number.isFinite(amount) || amount <= 0) return
+        this.recentDamageDealt += amount
+        this.lastBalanceSampleTime = this.runTime
+
+    }
+
+    getRecentDpsEstimate() {
+
+        if (!Number.isFinite(this.recentDamageWindow) || this.recentDamageWindow <= 0) {
+            return 0
+        }
+
+        return this.recentDamageDealt / this.recentDamageWindow
+
+    }
+
+    formatBalanceOverlayTime(timeValue) {
+
+        if (!Number.isFinite(timeValue)) return "--"
+
+        const totalSeconds = Math.max(0, timeValue)
+        const minutes = Math.floor(totalSeconds / 60)
+        const seconds = totalSeconds % 60
+
+        if (minutes <= 0) {
+            return totalSeconds.toFixed(1) + "s"
+        }
+
+        return `${minutes}m ${seconds.toFixed(1)}s`
 
     }
 
@@ -724,11 +859,157 @@ export class Game {
 
     }
 
+    getWorldBossTargetLevel() {
+
+        if (Number.isFinite(this.bossTargetWorld)) return this.bossTargetWorld
+        if (Number.isFinite(this.pendingWorldLevel)) return this.pendingWorldLevel
+        return this.worldLevel + 1
+
+    }
+
+    getCurrentWorldBossConfig() {
+
+        const targetLevel = this.getWorldBossTargetLevel()
+        const exactConfig = WORLD_BOSS_DATA[targetLevel]
+        if (exactConfig) return exactConfig
+
+        const worldIds = Object.keys(WORLD_BOSS_DATA)
+            .map(Number)
+            .filter(Number.isFinite)
+            .sort((a, b) => a - b)
+        const highestWorldId = worldIds.length > 0 ? worldIds[worldIds.length - 1] : 1
+
+        return WORLD_BOSS_DATA[highestWorldId] || WORLD_BOSS_DATA[1]
+
+    }
+
+    getWorldBossName() {
+
+        return this.getCurrentWorldBossConfig().name || "World Gate Boss"
+
+    }
+
+    getWorldBossSubtitle() {
+
+        return this.getCurrentWorldBossConfig().subtitle || "Dimensional Hostile Signature"
+
+    }
+
+    getProgressMatrixNodes() {
+
+        return PROGRESS_MATRIX_NODES
+
+    }
+
+    hasProgressNode(nodeId) {
+
+        return this.progressMatrixPurchased.has(nodeId)
+
+    }
+
+    isProgressNodePurchased(nodeId) {
+
+        return this.hasProgressNode(nodeId)
+
+    }
+
+    canPurchaseProgressNode(node) {
+
+        if (!node || !node.id) return false
+        if (this.isProgressNodePurchased(node.id)) return false
+
+        if (node.prerequisite && !this.hasProgressNode(node.prerequisite)) {
+            return false
+        }
+
+        return this.coreFragments >= (node.cost || 0)
+
+    }
+
+    purchaseProgressNode(nodeId) {
+
+        const node = this.getProgressMatrixNodes().find(entry => entry.id === nodeId)
+        if (!node) return false
+        if (!this.canPurchaseProgressNode(node)) return false
+
+        this.coreFragments -= node.cost || 0
+        this.progressMatrixPurchased.add(node.id)
+
+        this.floatingTexts.push(
+            new FloatingText(
+                this.gridX + (this.gridWidth * 0.5),
+                this.canvas.height * 0.4,
+                node.title + " Unlocked",
+                "#cda7ff"
+            )
+        )
+
+        return true
+
+    }
+
+    getBossPrepCost(baseCost) {
+
+        if (!Number.isFinite(baseCost)) return 0
+
+        let costMultiplier = 1
+        if (this.hasProgressNode("prepLogistics")) {
+            costMultiplier *= 0.9
+        }
+
+        return Math.max(1, Math.floor(baseCost * costMultiplier))
+
+    }
+
+    getBossFragmentReward() {
+
+        const currentWorld = Math.max(1, Math.floor(this.worldLevel || 1))
+        let reward = 1
+
+        if (currentWorld === 2) {
+            reward = 2
+        } else if (currentWorld === 3) {
+            reward = 3
+        } else if (currentWorld >= 4) {
+            reward = 5
+        }
+
+        if (this.hasProgressNode("salvageProtocol")) {
+            reward += 1
+        }
+
+        return reward
+
+    }
+
     getWorldGateCost() {
 
-        return Math.floor(
+        let cost = Math.floor(
             WORLD_GATE_BASE_COST *
             Math.pow(WORLD_GATE_COST_GROWTH, Math.max(0, this.worldLevel - 1))
+        )
+
+        let gateCostMultiplier = 1
+        if (this.hasProgressNode("gateCalibration1")) {
+            gateCostMultiplier -= 0.1
+        }
+        if (this.hasProgressNode("gateCalibration2")) {
+            gateCostMultiplier -= 0.15
+        }
+
+        cost = Math.floor(cost * Math.max(0.2, gateCostMultiplier))
+        return Math.max(1, cost)
+
+    }
+
+    isBossPrepPhase() {
+
+        return (
+            this.gameState === GAME_STATE_PLAYING &&
+            this.transportReady &&
+            this.worldGatePurchased &&
+            !this.transportAnimating &&
+            !this.bossFightActive
         )
 
     }
@@ -834,6 +1115,8 @@ export class Game {
         const targetType = String(type || "")
         if (!targetType) return
 
+        this.runKills += 1
+
         if (!this.discoveredTargets.has(targetType)) {
             this.discoveredTargets.add(targetType)
 
@@ -856,6 +1139,16 @@ export class Game {
         const mouseY = event.clientY - rect.top
 
         if (mouseX < 0 || mouseX > this.canvas.width || mouseY < 0 || mouseY > this.canvas.height) {
+            return
+        }
+
+        if (this.showArchivesMenu) {
+            this.handleArchivesMenuClick(mouseX, mouseY)
+            return
+        }
+
+        if (this.showProgressMatrix) {
+            this.handleProgressMatrixClick(mouseX, mouseY)
             return
         }
 
@@ -941,6 +1234,16 @@ export class Game {
     }
 
     handleWheel(event) {
+
+        if (this.showArchivesMenu) {
+            event.preventDefault()
+            return
+        }
+
+        if (this.showProgressMatrix) {
+            event.preventDefault()
+            return
+        }
 
         if (this.showTargetIndex) {
             event.preventDefault()
@@ -1076,11 +1379,23 @@ export class Game {
         }
 
         if (
-            this.isPanelSectionExpanded("world") &&
-            this.transportReady &&
-            !this.worldGatePurchased
+            this.isPanelSectionExpanded("world")
         ) {
-            buttons.push(this.worldGatePurchaseButton)
+            if (this.transportReady && !this.worldGatePurchased) {
+                buttons.push(this.worldGatePurchaseButton)
+            }
+
+            if (this.isBossPrepPhase()) {
+                if (!this.bossPrepShield) {
+                    buttons.push(this.bossPrepShieldButton)
+                }
+                if (!this.bossPrepOvercharger) {
+                    buttons.push(this.bossPrepOverchargerButton)
+                }
+                if (!this.bossPrepStabilizer) {
+                    buttons.push(this.bossPrepStabilizerButton)
+                }
+            }
         }
 
         return buttons
@@ -1115,6 +1430,8 @@ export class Game {
         if (this.showPauseMenu) return false
         if (this.showInfoScreen) return false
         if (this.showTargetIndex) return false
+        if (this.showProgressMatrix) return false
+        if (this.showArchivesMenu) return false
 
         return this.isInsideButton(mouseX, mouseY, this.pauseButton)
 
@@ -1126,6 +1443,8 @@ export class Game {
         if (this.showPauseMenu) return false
         if (this.showInfoScreen) return false
         if (this.showTargetIndex) return false
+        if (this.showProgressMatrix) return false
+        if (this.showArchivesMenu) return false
 
         return this.isInsideButton(mouseX, mouseY, this.muteButton)
 
@@ -1142,7 +1461,26 @@ export class Game {
             return
         }
 
+        if (this.showArchivesMenu) {
+            this.canvas.style.cursor = this.isHoveringArchivesMenuButton(this.mouseX, this.mouseY)
+                ? "pointer"
+                : "default"
+            return
+        }
+
         if (this.gameState === GAME_STATE_TITLE) {
+            if (this.showProgressMatrix) {
+                const hoveringMatrixCard = this.getProgressMatrixHoveredCard(this.mouseX, this.mouseY)
+                const canBuyHoveredNode = Boolean(
+                    hoveringMatrixCard && this.canPurchaseProgressNode(hoveringMatrixCard.node)
+                )
+                this.canvas.style.cursor = (
+                    this.isHoveringProgressMatrixBackButton(this.mouseX, this.mouseY) ||
+                    canBuyHoveredNode
+                ) ? "pointer" : "default"
+                return
+            }
+
             if (this.showTargetIndex) {
                 this.canvas.style.cursor = this.isHoveringTargetIndexBackButton(this.mouseX, this.mouseY)
                     ? "pointer"
@@ -1167,6 +1505,18 @@ export class Game {
 
         if (this.gameState !== GAME_STATE_PLAYING) {
             this.canvas.style.cursor = "default"
+            return
+        }
+
+        if (this.showProgressMatrix) {
+            const hoveringMatrixCard = this.getProgressMatrixHoveredCard(this.mouseX, this.mouseY)
+            const canBuyHoveredNode = Boolean(
+                hoveringMatrixCard && this.canPurchaseProgressNode(hoveringMatrixCard.node)
+            )
+            this.canvas.style.cursor = (
+                this.isHoveringProgressMatrixBackButton(this.mouseX, this.mouseY) ||
+                canBuyHoveredNode
+            ) ? "pointer" : "default"
             return
         }
 
@@ -1266,20 +1616,11 @@ export class Game {
                 height: buttonHeight
             })
             buttons.push({
-                id: "info",
-                label: "Info",
-                iconId: "targetValue",
-                x,
-                y: startY + (buttonHeight + buttonGap) * 2,
-                width: buttonWidth,
-                height: buttonHeight
-            })
-            buttons.push({
-                id: "targetIndex",
-                label: "Target Index",
+                id: "archives",
+                label: "Archives",
                 iconId: "diversity",
                 x,
-                y: startY + (buttonHeight + buttonGap) * 3,
+                y: startY + (buttonHeight + buttonGap) * 2,
                 width: buttonWidth,
                 height: buttonHeight
             })
@@ -1296,20 +1637,11 @@ export class Game {
             height: buttonHeight
         })
         buttons.push({
-            id: "info",
-            label: "Info",
-            iconId: "targetValue",
-            x,
-            y: startY + buttonHeight + buttonGap,
-            width: buttonWidth,
-            height: buttonHeight
-        })
-        buttons.push({
-            id: "targetIndex",
-            label: "Target Index",
+            id: "archives",
+            label: "Archives",
             iconId: "diversity",
             x,
-            y: startY + (buttonHeight + buttonGap) * 2,
+            y: startY + buttonHeight + buttonGap,
             width: buttonWidth,
             height: buttonHeight
         })
@@ -1330,6 +1662,8 @@ export class Game {
             this.gameState = GAME_STATE_PLAYING
             this.showInfoScreen = false
             this.showTargetIndex = false
+            this.showProgressMatrix = false
+            this.showArchivesMenu = false
             return
         }
 
@@ -1337,18 +1671,24 @@ export class Game {
             const shouldReset = confirm("Start a new game? This will reset saved progress.")
             if (!shouldReset) return
             this.saveSystem.reset()
+            this.resetRunTelemetry()
             this.hasSaveGame = false
             this.gameState = GAME_STATE_PLAYING
             this.showInfoScreen = false
             this.showTargetIndex = false
+            this.showProgressMatrix = false
+            this.showArchivesMenu = false
             return
         }
 
         if (clickedButton.id === "start") {
+            this.resetRunTelemetry()
             this.gameState = GAME_STATE_PLAYING
             this.musicQueue = []
             this.showInfoScreen = false
             this.showTargetIndex = false
+            this.showProgressMatrix = false
+            this.showArchivesMenu = false
             if (!this.audioUnlocked) {
                 this.unlockAudio()
             }
@@ -1362,17 +1702,11 @@ export class Game {
             return
         }
 
-        if (clickedButton.id === "info") {
-            this.showInfoScreen = true
-            this.infoScroll = 0
-            this.showTargetIndex = false
-            return
-        }
-
-        if (clickedButton.id === "targetIndex") {
-            this.showTargetIndex = true
-            this.targetIndexScroll = 0
+        if (clickedButton.id === "archives") {
+            this.showArchivesMenu = true
             this.showInfoScreen = false
+            this.showTargetIndex = false
+            this.showProgressMatrix = false
         }
 
     }
@@ -1386,6 +1720,8 @@ export class Game {
             this.infoScroll = 0
             this.showTargetIndex = false
             this.targetIndexScroll = 0
+            this.showProgressMatrix = false
+            this.showArchivesMenu = false
         }
         this.canvas.style.cursor = "default"
 
@@ -1401,8 +1737,7 @@ export class Game {
             { id: "save", label: "Save Game" },
             { id: "mute", label: this.isMuted ? "Unmute Audio" : "Mute Audio" },
             { id: "skipSong", label: "Skip Song" },
-            { id: "info", label: "Info" },
-            { id: "targetIndex", label: "Target Index" },
+            { id: "archives", label: "Archives" },
             { id: "menu", label: "Main Menu" }
         ]
         const totalHeight = (labels.length * buttonHeight) + ((labels.length - 1) * buttonGap)
@@ -1473,17 +1808,11 @@ export class Game {
             return
         }
 
-        if (clickedButton.id === "info") {
-            this.showInfoScreen = true
-            this.infoScroll = 0
-            this.showTargetIndex = false
-            return
-        }
-
-        if (clickedButton.id === "targetIndex") {
-            this.showTargetIndex = true
-            this.targetIndexScroll = 0
+        if (clickedButton.id === "archives") {
+            this.showArchivesMenu = true
             this.showInfoScreen = false
+            this.showTargetIndex = false
+            this.showProgressMatrix = false
             return
         }
 
@@ -1501,7 +1830,200 @@ export class Game {
             this.isPaused = false
             this.currentMusic = null
             this.titleInitialized = false
+            this.showProgressMatrix = false
+            this.showArchivesMenu = false
         }
+
+    }
+
+    getArchivesMenuLayout() {
+
+        const panelWidth = Math.min(540, this.canvas.width - 96)
+        const panelHeight = Math.min(440, this.canvas.height - 96)
+        const panelX = (this.canvas.width - panelWidth) / 2
+        const panelY = (this.canvas.height - panelHeight) / 2
+
+        return {
+            panel: {
+                x: panelX,
+                y: panelY,
+                width: panelWidth,
+                height: panelHeight
+            },
+            titleY: panelY + 48
+        }
+
+    }
+
+    getArchivesMenuButtons() {
+
+        const layout = this.getArchivesMenuLayout()
+        const buttonWidth = Math.min(320, layout.panel.width - 80)
+        const buttonHeight = 54
+        const buttonGap = 14
+        const startX = layout.panel.x + ((layout.panel.width - buttonWidth) / 2)
+        const startY = layout.panel.y + 98
+
+        return [
+            {
+                id: "info",
+                label: "Info",
+                iconId: "targetValue",
+                x: startX,
+                y: startY,
+                width: buttonWidth,
+                height: buttonHeight
+            },
+            {
+                id: "targetIndex",
+                label: "Target Index",
+                iconId: "diversity",
+                x: startX,
+                y: startY + (buttonHeight + buttonGap),
+                width: buttonWidth,
+                height: buttonHeight
+            },
+            {
+                id: "progressMatrix",
+                label: "Progress Matrix",
+                iconId: "strength",
+                x: startX,
+                y: startY + ((buttonHeight + buttonGap) * 2),
+                width: buttonWidth,
+                height: buttonHeight
+            },
+            {
+                id: "back",
+                label: "Back",
+                iconId: "simpleLaser",
+                x: startX,
+                y: startY + ((buttonHeight + buttonGap) * 3),
+                width: buttonWidth,
+                height: buttonHeight
+            }
+        ]
+
+    }
+
+    isHoveringArchivesMenuButton(mouseX, mouseY) {
+
+        const buttons = this.getArchivesMenuButtons()
+        return buttons.some(button => this.isInsideButton(mouseX, mouseY, button))
+
+    }
+
+    handleArchivesMenuClick(mouseX, mouseY) {
+
+        const buttons = this.getArchivesMenuButtons()
+        const clickedButton = buttons.find(button => this.isInsideButton(mouseX, mouseY, button))
+        if (!clickedButton) return
+
+        if (clickedButton.id === "info") {
+            this.showArchivesMenu = false
+            this.showInfoScreen = true
+            this.infoScroll = 0
+            this.showTargetIndex = false
+            this.showProgressMatrix = false
+            return
+        }
+
+        if (clickedButton.id === "targetIndex") {
+            this.showArchivesMenu = false
+            this.showTargetIndex = true
+            this.targetIndexScroll = 0
+            this.showInfoScreen = false
+            this.showProgressMatrix = false
+            return
+        }
+
+        if (clickedButton.id === "progressMatrix") {
+            this.showArchivesMenu = false
+            this.showProgressMatrix = true
+            this.showInfoScreen = false
+            this.showTargetIndex = false
+            return
+        }
+
+        this.showArchivesMenu = false
+
+    }
+
+    drawArchivesMenu(ctx) {
+
+        const layout = this.getArchivesMenuLayout()
+        const buttons = this.getArchivesMenuButtons()
+
+        ctx.save()
+        ctx.fillStyle = "rgba(0,0,0,0.75)"
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+        const panelGradient = ctx.createLinearGradient(
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.x,
+            layout.panel.y + layout.panel.height
+        )
+        panelGradient.addColorStop(0, "rgba(20,27,46,0.95)")
+        panelGradient.addColorStop(1, "rgba(11,16,29,0.95)")
+
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.fillStyle = panelGradient
+        ctx.fill()
+
+        ctx.shadowColor = "#3a86ff"
+        ctx.shadowBlur = 16
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.strokeStyle = "rgba(58,134,255,0.55)"
+        ctx.lineWidth = 1.3
+        ctx.stroke()
+        ctx.shadowBlur = 0
+
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillStyle = "#e8f3ff"
+        ctx.font = "bold 34px Arial"
+        ctx.fillText("ARCHIVES", this.canvas.width / 2, layout.titleY)
+
+        ctx.fillStyle = "rgba(210,224,245,0.88)"
+        ctx.font = "14px Arial"
+        ctx.fillText("Access records, codex data, and matrix planning", this.canvas.width / 2, layout.titleY + 26)
+
+        for (const button of buttons) {
+            const hovered = this.isInsideButton(this.mouseX, this.mouseY, button)
+            this.drawUpgradeCard(
+                ctx,
+                button.x,
+                button.y,
+                button.width,
+                button.height,
+                {
+                    title: button.label,
+                    cost: "",
+                    level: 0,
+                    canAfford: true,
+                    selected: false,
+                    unlocked: true,
+                    hovered,
+                    iconId: button.iconId
+                }
+            )
+        }
+
+        ctx.restore()
 
     }
 
@@ -1823,6 +2345,326 @@ export class Game {
 
     }
 
+    getProgressMatrixLayout() {
+
+        const panelWidth = Math.min(1060, this.canvas.width - 84)
+        const panelHeight = Math.min(720, this.canvas.height - 72)
+        const panelX = (this.canvas.width - panelWidth) / 2
+        const panelY = (this.canvas.height - panelHeight) / 2
+        const contentX = panelX + 24
+        const contentY = panelY + 112
+        const contentWidth = panelWidth - 48
+        const contentHeight = panelHeight - 148
+        const branchGap = 18
+        const branchWidth = (contentWidth - branchGap) / 2
+
+        return {
+            panel: {
+                x: panelX,
+                y: panelY,
+                width: panelWidth,
+                height: panelHeight
+            },
+            content: {
+                x: contentX,
+                y: contentY,
+                width: contentWidth,
+                height: contentHeight
+            },
+            branches: {
+                worldResonance: {
+                    x: contentX,
+                    y: contentY,
+                    width: branchWidth
+                },
+                bossMastery: {
+                    x: contentX + branchWidth + branchGap,
+                    y: contentY,
+                    width: branchWidth
+                }
+            },
+            backButton: {
+                x: panelX + 18,
+                y: panelY + 18,
+                width: 94,
+                height: 36
+            },
+            titleY: panelY + 46
+        }
+
+    }
+
+    getProgressMatrixCards() {
+
+        const layout = this.getProgressMatrixLayout()
+        const cards = []
+        const cardGap = 10
+        const branchNodeCount = 6
+        const availableHeight = Math.max(320, layout.content.height - 26)
+        const calculatedHeight = Math.floor(
+            (availableHeight - (cardGap * (branchNodeCount - 1))) / branchNodeCount
+        )
+        const cardHeight = Math.max(58, Math.min(78, calculatedHeight))
+        const branches = [
+            { key: "worldResonance" },
+            { key: "bossMastery" }
+        ]
+
+        for (const branch of branches) {
+            const branchLayout = layout.branches[branch.key]
+            const nodes = this.getProgressMatrixNodes().filter(node => node.branch === branch.key)
+
+            for (let index = 0; index < nodes.length; index++) {
+                const node = nodes[index]
+                cards.push({
+                    node,
+                    branch: branch.key,
+                    x: branchLayout.x,
+                    y: branchLayout.y + 26 + (index * (cardHeight + cardGap)),
+                    width: branchLayout.width,
+                    height: cardHeight
+                })
+            }
+        }
+
+        return cards
+
+    }
+
+    getProgressMatrixHoveredCard(mouseX, mouseY) {
+
+        const cards = this.getProgressMatrixCards()
+        return cards.find(card => this.isInsideButton(mouseX, mouseY, card)) || null
+
+    }
+
+    isHoveringProgressMatrixBackButton(mouseX, mouseY) {
+
+        const { backButton } = this.getProgressMatrixLayout()
+        return this.isInsideButton(mouseX, mouseY, backButton)
+
+    }
+
+    handleProgressMatrixClick(mouseX, mouseY) {
+
+        const { backButton } = this.getProgressMatrixLayout()
+        if (this.isInsideButton(mouseX, mouseY, backButton)) {
+            this.showProgressMatrix = false
+            this.canvas.style.cursor = "default"
+            return
+        }
+
+        const hoveredCard = this.getProgressMatrixHoveredCard(mouseX, mouseY)
+        if (!hoveredCard) return
+
+        const purchased = this.purchaseProgressNode(hoveredCard.node.id)
+        if (!purchased) return
+
+        this.canvas.style.cursor = "pointer"
+
+    }
+
+    resolveProgressMatrixIconId(nodeId) {
+
+        switch (nodeId) {
+            case "transportEfficiency1":
+            case "transportEfficiency2":
+                return "spawnRate"
+            case "gateCalibration1":
+            case "gateCalibration2":
+                return "diversity"
+            case "modifierInsight":
+                return "targetValue"
+            case "resonanceBuffer":
+                return "amplitude"
+            case "coreBreaker":
+            case "phaseBurst":
+                return "strength"
+            case "adaptiveCoolant":
+                return "fireRate"
+            case "emergencyPlating":
+                return "amplitude"
+            case "phaseAnalysis":
+                return "frequency"
+            case "prepLogistics":
+                return "targetValue"
+            case "salvageProtocol":
+                return "autoFire"
+            default:
+                return "strength"
+        }
+
+    }
+
+    drawProgressMatrix(ctx) {
+
+        const layout = this.getProgressMatrixLayout()
+        const cards = this.getProgressMatrixCards()
+        const hoveredCard = this.getProgressMatrixHoveredCard(this.mouseX, this.mouseY)
+        const backHovered = this.isHoveringProgressMatrixBackButton(this.mouseX, this.mouseY)
+
+        ctx.save()
+        ctx.fillStyle = "rgba(0,0,0,0.75)"
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+        const panelGradient = ctx.createLinearGradient(
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.x,
+            layout.panel.y + layout.panel.height
+        )
+        panelGradient.addColorStop(0, "rgba(20,27,46,0.95)")
+        panelGradient.addColorStop(1, "rgba(11,16,29,0.95)")
+
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.fillStyle = panelGradient
+        ctx.fill()
+
+        ctx.shadowColor = "#9b5cff"
+        ctx.shadowBlur = 18
+        this.drawRoundedRectPath(
+            ctx,
+            layout.panel.x,
+            layout.panel.y,
+            layout.panel.width,
+            layout.panel.height,
+            16
+        )
+        ctx.strokeStyle = "rgba(155,92,255,0.6)"
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+        ctx.shadowBlur = 0
+
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillStyle = "#f0e6ff"
+        ctx.font = "bold 34px Arial"
+        ctx.fillText("PROGRESS MATRIX", this.canvas.width / 2, layout.titleY)
+
+        ctx.fillStyle = "#ffd87a"
+        ctx.font = "bold 16px Arial"
+        ctx.fillText(
+            "Core Fragments: " + this.coreFragments,
+            this.canvas.width / 2,
+            layout.titleY + 30
+        )
+
+        this.drawRoundedRectPath(
+            ctx,
+            layout.backButton.x,
+            layout.backButton.y,
+            layout.backButton.width,
+            layout.backButton.height,
+            10
+        )
+        ctx.fillStyle = backHovered ? "rgba(155,92,255,0.30)" : "rgba(58,134,255,0.2)"
+        ctx.fill()
+        this.drawRoundedRectPath(
+            ctx,
+            layout.backButton.x,
+            layout.backButton.y,
+            layout.backButton.width,
+            layout.backButton.height,
+            10
+        )
+        ctx.strokeStyle = backHovered ? "rgba(155,92,255,0.88)" : "rgba(58,134,255,0.65)"
+        ctx.lineWidth = 1.2
+        ctx.stroke()
+        ctx.fillStyle = "#eaf3ff"
+        ctx.font = "bold 14px Arial"
+        ctx.fillText(
+            "BACK",
+            layout.backButton.x + (layout.backButton.width / 2),
+            layout.backButton.y + (layout.backButton.height / 2)
+        )
+
+        ctx.textAlign = "left"
+        ctx.textBaseline = "alphabetic"
+        ctx.fillStyle = "#8fd3ff"
+        ctx.font = "bold 14px Arial"
+        ctx.fillText("WORLD RESONANCE", layout.branches.worldResonance.x, layout.branches.worldResonance.y + 10)
+        ctx.fillStyle = "#d2a7ff"
+        ctx.fillText("BOSS MASTERY", layout.branches.bossMastery.x, layout.branches.bossMastery.y + 10)
+
+        for (const card of cards) {
+            const node = card.node
+            const isPurchased = this.isProgressNodePurchased(node.id)
+            const prerequisiteMet = !node.prerequisite || this.hasProgressNode(node.prerequisite)
+            const isPurchasable = this.canPurchaseProgressNode(node)
+            const isHovered = hoveredCard ? hoveredCard.node.id === node.id : false
+            const iconId = this.resolveProgressMatrixIconId(node.id)
+
+            this.drawUpgradeCard(
+                ctx,
+                card.x,
+                card.y,
+                card.width,
+                card.height,
+                {
+                    title: node.title,
+                    cost: node.description,
+                    canAfford: isPurchasable,
+                    selected: isPurchased,
+                    unlocked: prerequisiteMet || isPurchased,
+                    hovered: isHovered,
+                    iconId,
+                    stackSubtitle: true
+                }
+            )
+
+            ctx.save()
+            ctx.beginPath()
+            this.drawRoundedRectPath(
+                ctx,
+                card.x,
+                card.y,
+                card.width,
+                card.height,
+                12
+            )
+            ctx.clip()
+
+            const statusText = isPurchased
+                ? "BOUGHT"
+                : prerequisiteMet
+                    ? "Cost: " + node.cost + " CF"
+                    : "LOCKED"
+            ctx.textAlign = "right"
+            ctx.textBaseline = "bottom"
+            ctx.font = "bold 12px Arial"
+            ctx.fillStyle = isPurchased
+                ? "#b7f3d1"
+                : prerequisiteMet
+                    ? (isPurchasable ? "#9ad3ff" : "rgba(255,255,255,0.65)")
+                    : "rgba(255,255,255,0.42)"
+            ctx.fillText(statusText, card.x + card.width - 12, card.y + card.height - 10)
+
+            if (!isPurchased && node.prerequisite && !prerequisiteMet) {
+                const prerequisiteNode = this.getProgressMatrixNodes().find(entry => entry.id === node.prerequisite)
+                const prerequisiteTitle = prerequisiteNode ? prerequisiteNode.title : node.prerequisite
+                ctx.textAlign = "left"
+                ctx.font = "11px Arial"
+                ctx.fillStyle = "rgba(255,255,255,0.42)"
+                ctx.fillText(
+                    "Requires: " + prerequisiteTitle,
+                    card.x + 12,
+                    card.y + card.height - 10
+                )
+            }
+            ctx.restore()
+        }
+
+        ctx.restore()
+
+    }
+
     handlePanelClick(mouseX, mouseY) {
 
         const headerButtons = this.getVisiblePanelHeaderButtons()
@@ -1988,6 +2830,59 @@ export class Game {
                 )
             )
             return
+        }
+
+        if (this.isPanelSectionExpanded("world") && this.isBossPrepPhase()) {
+            if (!this.bossPrepShield && this.isInsideButton(mouseX, mouseY, this.bossPrepShieldButton)) {
+                const shieldCost = this.getBossPrepCost(BOSS_PREP_SHIELD_COST)
+                if (this.points < shieldCost) return
+                this.points -= shieldCost
+                this.bossPrepShield = true
+                this.triggerUpgradeFlash(this.bossPrepShieldButton)
+                this.floatingTexts.push(
+                    new FloatingText(
+                        this.gridX + this.gridWidth / 2,
+                        this.canvas.height / 2 + 40,
+                        "Shield Prepared",
+                        "#9bf3ff"
+                    )
+                )
+                return
+            }
+
+            if (!this.bossPrepOvercharger && this.isInsideButton(mouseX, mouseY, this.bossPrepOverchargerButton)) {
+                const overchargerCost = this.getBossPrepCost(BOSS_PREP_OVERCHARGER_COST)
+                if (this.points < overchargerCost) return
+                this.points -= overchargerCost
+                this.bossPrepOvercharger = true
+                this.triggerUpgradeFlash(this.bossPrepOverchargerButton)
+                this.floatingTexts.push(
+                    new FloatingText(
+                        this.gridX + this.gridWidth / 2,
+                        this.canvas.height / 2 + 40,
+                        "Overcharger Primed",
+                        "#ffb58f"
+                    )
+                )
+                return
+            }
+
+            if (!this.bossPrepStabilizer && this.isInsideButton(mouseX, mouseY, this.bossPrepStabilizerButton)) {
+                const stabilizerCost = this.getBossPrepCost(BOSS_PREP_STABILIZER_COST)
+                if (this.points < stabilizerCost) return
+                this.points -= stabilizerCost
+                this.bossPrepStabilizer = true
+                this.triggerUpgradeFlash(this.bossPrepStabilizerButton)
+                this.floatingTexts.push(
+                    new FloatingText(
+                        this.gridX + this.gridWidth / 2,
+                        this.canvas.height / 2 + 40,
+                        "Stabilizer Tuned",
+                        "#b2ccff"
+                    )
+                )
+                return
+            }
         }
 
     }
@@ -2165,7 +3060,10 @@ export class Game {
             }
 
             target.hitFlashTime = target.hitFlashDuration
+            const previousHealth = target.health
             target.health -= shockwaveDamage
+            const dealt = Math.max(0, previousHealth - Math.max(0, target.health))
+            this.recordDamageDealt(dealt)
 
             if (this.particleSystem) {
                 this.particleSystem.spawnExplosion(target.x, target.y, 2, "#8be8ff")
@@ -2226,11 +3124,22 @@ export class Game {
         if (!Number.isFinite(amount) || amount <= 0) return
         if (this.transportReady) return
 
-        this.transportCharge += amount
+        let gainMultiplier = 1
+        if (this.hasProgressNode("transportEfficiency1")) {
+            gainMultiplier += 0.1
+        }
+        if (this.hasProgressNode("transportEfficiency2")) {
+            gainMultiplier += 0.15
+        }
+
+        this.transportCharge += amount * gainMultiplier
 
         if (this.transportCharge >= this.transportChargeRequired) {
             this.transportCharge = this.transportChargeRequired
             this.transportReady = true
+            if (this.transportReadyTime == null) {
+                this.transportReadyTime = this.runTime
+            }
 
             this.floatingTexts.push(
                 new FloatingText(
@@ -2264,22 +3173,561 @@ export class Game {
 
     }
 
+    configureBossWeaponFromCurrentLaser() {
+
+        const laserType = this.currentLaserType || "simple"
+        const laserStrength = Math.max(1, this.laserStrength || 1)
+        const laserFireRate = Math.max(0.5, this.laserFireRate || 1)
+
+        let damage = laserStrength
+        let cooldownBase = Math.max(0.08, 0.22 / laserFireRate)
+        let hitWindow = 80
+        let color = "#3a86ff"
+
+        if (laserType === "plasma") {
+            damage = laserStrength * 1.2
+            cooldownBase = Math.max(0.09, 0.24 / laserFireRate)
+            hitWindow = 84
+            color = "#9b5cff"
+        } else if (laserType === "pulse") {
+            damage = laserStrength
+            cooldownBase = Math.max(0.08, 0.2 / laserFireRate)
+            hitWindow = 90 + (this.pulseMasteryLevel * 6)
+            color = "#8be8ff"
+        } else if (laserType === "scatter") {
+            damage = laserStrength * 0.72
+            cooldownBase = Math.max(0.06, 0.16 / laserFireRate)
+            hitWindow = 105 + (this.scatterMasteryLevel * 4)
+            color = "#c38bff"
+        } else if (laserType === "heavy") {
+            damage = laserStrength * (1.8 + (this.heavyMasteryLevel * 0.15))
+            cooldownBase = Math.max(0.16, 0.34 / laserFireRate)
+            hitWindow = 72
+            color = "#ff8a8a"
+        }
+
+        if (this.hasProgressNode("coreBreaker")) {
+            damage *= 1.1
+        }
+
+        if (this.hasProgressNode("adaptiveCoolant")) {
+            cooldownBase *= 0.92
+        }
+
+        this.bossWeaponType = laserType
+        this.bossWeaponDamage = Math.max(1, Math.round(damage))
+        this.bossWeaponCooldownBase = cooldownBase
+        this.bossWeaponHitWindow = hitWindow
+        this.bossWeaponColor = color
+
+    }
+
+    configureBossBeamVisualFromCurrentLaser() {
+
+        const laserType = this.currentLaserType || "simple"
+        const baseWidth = Math.max(2, this.laserWidth || 3)
+        const strength = Math.max(1, this.laserStrength || 1)
+
+        this.bossBeamVisualWidth = baseWidth
+        this.bossBeamVisualGlow = 1 + (strength * 0.03)
+        this.bossBeamVisualAmplitude = 4.5
+        this.bossBeamVisualFrequency = 0.018
+        this.bossBeamVisualScatterCount = 1
+        this.bossBeamVisualColorPrimary = "#5caeff"
+        this.bossBeamVisualColorSecondary = "#d9f6ff"
+
+        if (laserType === "plasma") {
+            this.bossBeamVisualWidth = baseWidth * 1.15
+            this.bossBeamVisualGlow = 1.45 + (strength * 0.05)
+            this.bossBeamVisualAmplitude = 6.5
+            this.bossBeamVisualFrequency = 0.021
+            this.bossBeamVisualColorPrimary = "#b074ff"
+            this.bossBeamVisualColorSecondary = "#f0d9ff"
+            return
+        }
+
+        if (laserType === "pulse") {
+            this.bossBeamVisualWidth = baseWidth * 1.05
+            this.bossBeamVisualGlow = 1.2 + (strength * 0.04)
+            this.bossBeamVisualAmplitude = 9 + (this.pulseMasteryLevel * 1.2)
+            this.bossBeamVisualFrequency = 0.025
+            this.bossBeamVisualColorPrimary = "#8be8ff"
+            this.bossBeamVisualColorSecondary = "#e7feff"
+            return
+        }
+
+        if (laserType === "scatter") {
+            this.bossBeamVisualWidth = Math.max(1.5, baseWidth * 0.82)
+            this.bossBeamVisualGlow = 1.08 + (strength * 0.03)
+            this.bossBeamVisualAmplitude = 6
+            this.bossBeamVisualFrequency = 0.022
+            this.bossBeamVisualScatterCount = Math.max(3, Math.min(7, 3 + this.scatterMasteryLevel))
+            this.bossBeamVisualColorPrimary = "#c38bff"
+            this.bossBeamVisualColorSecondary = "#f6e5ff"
+            return
+        }
+
+        if (laserType === "heavy") {
+            this.bossBeamVisualWidth = (baseWidth * 1.6) + (this.heavyMasteryLevel * 0.35)
+            this.bossBeamVisualGlow = 1.7 + (strength * 0.04) + (this.heavyMasteryLevel * 0.08)
+            this.bossBeamVisualAmplitude = 2.2
+            this.bossBeamVisualFrequency = 0.013
+            this.bossBeamVisualColorPrimary = "#ff8a8a"
+            this.bossBeamVisualColorSecondary = "#ffd6e0"
+        }
+
+    }
+
+    drawBossFightBeam(ctx, emitterX, emitterY, beamStartX, beamEndX, flashRatio) {
+
+        const weaponType = this.bossWeaponType || "simple"
+        const beamWidth = Math.max(1.4, this.bossBeamVisualWidth || 3)
+        const beamGlow = Math.max(1, this.bossBeamVisualGlow || 1)
+        const waveAmplitude = this.bossBeamVisualAmplitude || 0
+        const waveFrequency = this.bossBeamVisualFrequency || 0.014
+        const beamPhase = this.bossBeamVisualPhase || 0
+        const primaryColor = this.bossBeamVisualColorPrimary || this.bossWeaponColor || "#3a86ff"
+        const secondaryColor = this.bossBeamVisualColorSecondary || "#d9f6ff"
+        const laneCount = weaponType === "scatter"
+            ? Math.max(1, Math.floor(this.bossBeamVisualScatterCount || 1))
+            : 1
+        const laneSpacing = weaponType === "scatter" ? 4.5 : 0
+        const segmentCount = 28
+
+        const drawLanePath = (laneIndex) => {
+            const laneCenter = laneIndex - ((laneCount - 1) / 2)
+            const laneOffset = laneCenter * laneSpacing
+
+            ctx.beginPath()
+            for (let segment = 0; segment <= segmentCount; segment++) {
+                const t = segment / segmentCount
+                const x = beamStartX + ((beamEndX - beamStartX) * t)
+                let wobble = 0
+
+                if (weaponType === "pulse") {
+                    wobble = Math.sin((x * waveFrequency) + (beamPhase * 10) + (laneIndex * 0.7))
+                        * waveAmplitude * (0.7 + (flashRatio * 0.3))
+                } else if (weaponType === "scatter") {
+                    wobble = Math.sin((x * waveFrequency) + (beamPhase * 8) + (laneIndex * 1.2))
+                        * Math.max(0.8, waveAmplitude * 0.5)
+                } else if (weaponType === "plasma") {
+                    wobble = Math.sin((x * waveFrequency) + (beamPhase * 7))
+                        * Math.max(0.4, waveAmplitude * 0.35)
+                } else if (weaponType === "heavy") {
+                    wobble = Math.sin((x * waveFrequency) + (beamPhase * 5))
+                        * Math.min(1.1, waveAmplitude * 0.25)
+                }
+
+                const y = emitterY + laneOffset + wobble
+                if (segment === 0) {
+                    ctx.moveTo(x, y)
+                } else {
+                    ctx.lineTo(x, y)
+                }
+            }
+        }
+
+        ctx.save()
+        ctx.globalCompositeOperation = "lighter"
+        ctx.lineCap = "round"
+        ctx.lineJoin = "round"
+
+        ctx.globalAlpha = (0.16 + (weaponType === "heavy" ? 0.04 : 0)) * flashRatio
+        ctx.strokeStyle = primaryColor
+        ctx.lineWidth = beamWidth * (weaponType === "heavy" ? 5.4 : 4.2) * beamGlow
+        for (let lane = 0; lane < laneCount; lane++) {
+            drawLanePath(lane)
+            ctx.stroke()
+        }
+
+        ctx.globalAlpha = (0.26 + (weaponType === "plasma" ? 0.04 : 0)) * flashRatio
+        ctx.strokeStyle = secondaryColor
+        ctx.lineWidth = beamWidth * (weaponType === "heavy" ? 3 : 2.4) * beamGlow
+        for (let lane = 0; lane < laneCount; lane++) {
+            drawLanePath(lane)
+            ctx.stroke()
+        }
+
+        ctx.globalCompositeOperation = "source-over"
+        ctx.globalAlpha = 0.25 + (flashRatio * 0.75)
+        ctx.strokeStyle = weaponType === "heavy" ? "#ffe8ef" : secondaryColor
+        ctx.lineWidth = beamWidth * (weaponType === "heavy" ? 1.2 : 1)
+        for (let lane = 0; lane < laneCount; lane++) {
+            drawLanePath(lane)
+            ctx.stroke()
+        }
+
+        if (weaponType === "heavy") {
+            ctx.globalAlpha = 0.22 + (flashRatio * 0.6)
+            ctx.strokeStyle = "#ffffff"
+            ctx.lineWidth = Math.max(1, beamWidth * 0.6)
+            drawLanePath(0)
+            ctx.stroke()
+        }
+
+        ctx.restore()
+
+    }
+
+    generateBossPhaseChoices() {
+
+        const choicePool = [
+            {
+                id: "damageBoost",
+                title: "Damage Boost",
+                description: "+25% boss weapon damage"
+            },
+            {
+                id: "rapidCapacitor",
+                title: "Rapid Capacitor",
+                description: "Faster firing in boss fight"
+            },
+            {
+                id: "stabilizedAim",
+                title: "Stabilized Aim",
+                description: "Wider boss hit window"
+            },
+            {
+                id: "reinforcedShielding",
+                title: "Reinforced Shielding",
+                description: "+1 max hit before defeat"
+            },
+            {
+                id: "phaseBurst",
+                title: "Phase Burst",
+                description: "Flat bonus boss damage"
+            }
+        ]
+
+        const pool = [...choicePool]
+        this.bossPhaseChoices = []
+
+        for (let i = 0; i < 3 && pool.length > 0; i++) {
+            const index = Math.floor(Math.random() * pool.length)
+            this.bossPhaseChoices.push(pool.splice(index, 1)[0])
+        }
+
+        if (this.hasProgressNode("phaseAnalysis")) {
+            const highImpactIds = ["damageBoost", "rapidCapacitor", "phaseBurst"]
+            const hasHighImpactChoice = this.bossPhaseChoices.some(choice => highImpactIds.includes(choice.id))
+
+            if (!hasHighImpactChoice) {
+                const candidate = choicePool.find(
+                    choice => highImpactIds.includes(choice.id) &&
+                        !this.bossPhaseChoices.some(existing => existing.id === choice.id)
+                )
+
+                if (candidate && this.bossPhaseChoices.length > 0) {
+                    this.bossPhaseChoices[this.bossPhaseChoices.length - 1] = candidate
+                }
+            }
+        }
+
+    }
+
+    applyBossPhaseChoice(choiceId) {
+
+        if (choiceId === "damageBoost") {
+            this.bossPhaseBuffDamage += 0.25
+        } else if (choiceId === "rapidCapacitor") {
+            this.bossPhaseBuffCooldownMultiplier *= 0.82
+        } else if (choiceId === "stabilizedAim") {
+            this.bossPhaseBuffHitWindow += 14
+        } else if (choiceId === "reinforcedShielding") {
+            this.bossPhaseBuffExtraLives += 1
+            this.bossMaxPlayerHits += 1
+        } else if (choiceId === "phaseBurst") {
+            this.bossPhaseBuffDamage += 0.15
+        }
+
+        this.bossAttackTimer = this.getBossPhaseAttackCooldown()
+        this.bossPhaseChoiceActive = false
+        this.bossPhaseChoices = []
+
+    }
+
+    openBossPhaseChoice() {
+
+        this.bossPhaseChoiceActive = true
+        this.generateBossPhaseChoices()
+
+    }
+
+    getBossPhaseChoiceCards() {
+
+        if (!Array.isArray(this.bossPhaseChoices) || this.bossPhaseChoices.length === 0) {
+            return []
+        }
+
+        const cardWidth = Math.min(460, this.canvas.width - 220)
+        const cardHeight = 84
+        const cardGap = 16
+        const totalHeight = (cardHeight * this.bossPhaseChoices.length) + (cardGap * Math.max(0, this.bossPhaseChoices.length - 1))
+        const startY = (this.canvas.height / 2) - (totalHeight / 2) + 30
+        const cardX = (this.canvas.width / 2) - (cardWidth / 2)
+
+        return this.bossPhaseChoices.map((choice, index) => ({
+            choice,
+            x: cardX,
+            y: startY + (index * (cardHeight + cardGap)),
+            width: cardWidth,
+            height: cardHeight
+        }))
+
+    }
+
+    getBossPhaseAttackCooldown() {
+
+        const bossConfig = this.activeBossConfig || this.getCurrentWorldBossConfig()
+        const configuredCooldowns = Array.isArray(bossConfig.phaseAttackCooldowns)
+            ? bossConfig.phaseAttackCooldowns
+            : null
+
+        if (configuredCooldowns && configuredCooldowns.length >= 3) {
+            if (this.bossPhase >= 3) return Math.max(0.2, configuredCooldowns[2] || 0.72)
+            if (this.bossPhase >= 2) return Math.max(0.25, configuredCooldowns[1] || 0.95)
+            return Math.max(0.3, configuredCooldowns[0] || 1.25)
+        }
+
+        if (this.bossPhase >= 3) return 0.72
+        if (this.bossPhase >= 2) return 0.95
+        return 1.25
+
+    }
+
+    spawnBossHazardLane(style = "cryo", targetY = null) {
+
+        const minY = this.bossLaserMinY + 14
+        const maxY = this.bossLaserMaxY - 14
+        const laneY = Number.isFinite(targetY)
+            ? Math.max(minY, Math.min(maxY, targetY))
+            : minY + (Math.random() * (maxY - minY))
+        const isCryo = style === "cryo"
+        const laneHeight = isCryo
+            ? 40 + (Math.random() * 18)
+            : 32 + (Math.random() * 22)
+        const laneLife = isCryo
+            ? 1.5 + (Math.random() * 0.7)
+            : 1.1 + (Math.random() * 0.9)
+
+        this.bossHazardLanes.push({
+            y: laneY,
+            height: laneHeight,
+            life: laneLife,
+            maxLife: laneLife,
+            style,
+            grace: isCryo ? 0.35 : 0.24,
+            hitCooldown: 0
+        })
+
+    }
+
+    spawnBossPhaseAttack() {
+
+        const bossConfig = this.activeBossConfig || this.getCurrentWorldBossConfig()
+        const attackStyle = (bossConfig && bossConfig.attackStyle) || "calibration"
+        const speedMultiplier = Number.isFinite(bossConfig.projectileSpeedMultiplier)
+            ? bossConfig.projectileSpeedMultiplier
+            : 1
+        const radiusMultiplier = Number.isFinite(bossConfig.projectileRadiusMultiplier)
+            ? bossConfig.projectileRadiusMultiplier
+            : 1
+        const spawnX = (this.canvas.width / 2) - 70
+        const minY = this.bossLaserMinY
+        const maxY = this.bossLaserMaxY
+        const playerY = Math.max(minY, Math.min(maxY, this.bossLaserY))
+        const clampY = (value) => Math.max(minY, Math.min(maxY, value))
+
+        const pushProjectile = ({
+            y,
+            radius,
+            speed,
+            life = 4,
+            alpha = 1
+        }) => {
+            this.bossProjectiles.push({
+                x: spawnX,
+                y: clampY(y),
+                radius: radius * radiusMultiplier,
+                speed: speed * speedMultiplier,
+                life,
+                alpha
+            })
+        }
+
+        if (attackStyle === "storm") {
+            const burstCount = this.bossPhase >= 3
+                ? (Math.random() < 0.62 ? 3 : 2)
+                : this.bossPhase >= 2
+                    ? (Math.random() < 0.55 ? 2 : 1)
+                    : (Math.random() < 0.3 ? 2 : 1)
+            const spread = this.bossPhase >= 3 ? 130 : this.bossPhase >= 2 ? 100 : 78
+
+            for (let i = 0; i < burstCount; i++) {
+                const targetY = playerY + ((Math.random() - 0.5) * spread)
+                pushProjectile({
+                    y: targetY,
+                    radius: 9 + (Math.random() * 4),
+                    speed: 360 + (Math.random() * 110)
+                })
+            }
+
+            if (Math.random() < (this.bossPhase >= 3 ? 0.4 : this.bossPhase >= 2 ? 0.26 : 0.12)) {
+                return 0.18 + (Math.random() * 0.16)
+            }
+            return
+        }
+
+        if (attackStyle === "cryo") {
+            const burstCount = this.bossPhase >= 3 ? 2 : 1
+            const spread = this.bossPhase >= 3 ? 90 : 64
+            const baseY = playerY + ((Math.random() - 0.5) * spread)
+
+            for (let i = 0; i < burstCount; i++) {
+                const offset = (i - ((burstCount - 1) / 2)) * (30 + (Math.random() * 16))
+                pushProjectile({
+                    y: baseY + offset,
+                    radius: 13 + (Math.random() * 5),
+                    speed: 250 + (Math.random() * 70)
+                })
+            }
+
+            if (Math.random() < (this.bossPhase >= 2 ? 0.28 : 0.16)) {
+                this.spawnBossHazardLane("cryo", baseY + ((Math.random() - 0.5) * 80))
+            }
+            return
+        }
+
+        if (attackStyle === "void") {
+            const mirroredBurst = Math.random() < (this.bossPhase >= 2 ? 0.5 : 0.28)
+            if (mirroredBurst) {
+                const offset = 34 + (Math.random() * (this.bossPhase >= 3 ? 66 : 46))
+                pushProjectile({
+                    y: playerY - offset,
+                    radius: 10 + (Math.random() * 5),
+                    speed: 340 + (Math.random() * 120)
+                })
+                pushProjectile({
+                    y: playerY + offset,
+                    radius: 10 + (Math.random() * 5),
+                    speed: 340 + (Math.random() * 120)
+                })
+                if (this.bossPhase >= 3 && Math.random() < 0.55) {
+                    pushProjectile({
+                        y: playerY + ((Math.random() - 0.5) * 30),
+                        radius: 9 + (Math.random() * 4),
+                        speed: 360 + (Math.random() * 120),
+                        alpha: 0.55
+                    })
+                }
+            } else {
+                const burstCount = this.bossPhase >= 3 ? 3 : this.bossPhase >= 2 ? 2 : 1
+                const spread = this.bossPhase >= 3 ? 170 : this.bossPhase >= 2 ? 130 : 92
+                for (let i = 0; i < burstCount; i++) {
+                    pushProjectile({
+                        y: playerY + ((Math.random() - 0.5) * spread),
+                        radius: 10 + (Math.random() * 4),
+                        speed: 330 + (Math.random() * 120),
+                        alpha: Math.random() < 0.25 ? 0.45 : 1
+                    })
+                }
+            }
+
+            if (Math.random() < (this.bossPhase >= 3 ? 0.45 : this.bossPhase >= 2 ? 0.3 : 0.16)) {
+                this.spawnBossHazardLane("void", playerY + ((Math.random() - 0.5) * 130))
+            }
+            if (Math.random() < (this.bossPhase >= 3 ? 0.44 : 0.24)) {
+                return 0.16 + (Math.random() * 0.16)
+            }
+            return
+        }
+
+        if (this.bossPhase >= 3) {
+            const burstCount = Math.random() < 0.55 ? 3 : 2
+            const baseY = clampY(playerY + ((Math.random() - 0.5) * 70))
+            const spread = 34 + (Math.random() * 12)
+
+            for (let i = 0; i < burstCount; i++) {
+                const offset = (i - ((burstCount - 1) / 2)) * spread
+                pushProjectile({
+                    y: baseY + offset,
+                    radius: 12 + (Math.random() * 4),
+                    speed: 340 + (Math.random() * 90)
+                })
+            }
+            return
+        }
+
+        if (this.bossPhase >= 2) {
+            const baseY = clampY(playerY + ((Math.random() - 0.5) * 120))
+            pushProjectile({
+                y: baseY,
+                radius: 10 + (Math.random() * 4),
+                speed: 310 + (Math.random() * 85)
+            })
+
+            if (Math.random() < 0.35) {
+                const offset = (22 + (Math.random() * 20)) * (Math.random() < 0.5 ? -1 : 1)
+                pushProjectile({
+                    y: baseY + offset,
+                    radius: 10 + (Math.random() * 4),
+                    speed: 310 + (Math.random() * 85)
+                })
+            }
+            return
+        }
+
+        pushProjectile({
+            y: minY + (Math.random() * (maxY - minY)),
+            radius: 10 + (Math.random() * 4),
+            speed: 280 + (Math.random() * 80)
+        })
+
+    }
+
     startBossFight() {
 
+        this.runBossAttempts += 1
         this.gameState = GAME_STATE_BOSS
         this.bossFightActive = true
-        this.bossMaxHealth = 300
-        this.bossHealth = this.bossMaxHealth
-        this.bossFightTimer = this.bossFightTimeLimit
         this.pendingWorldLevel = this.worldLevel + 1
         this.bossTargetWorld = this.pendingWorldLevel
+        this.activeBossConfig = this.getCurrentWorldBossConfig()
+        const healthMultiplier = Number.isFinite(this.activeBossConfig.maxHealthMultiplier)
+            ? this.activeBossConfig.maxHealthMultiplier
+            : 1
+        this.bossMaxHealth = Math.max(1, Math.round(300 * healthMultiplier))
+        this.bossHealth = this.bossMaxHealth
+        this.bossFightTimer = this.bossFightTimeLimit
+        this.configureBossWeaponFromCurrentLaser()
+        this.configureBossBeamVisualFromCurrentLaser()
+        this.bossBeamVisualPhase = 0
+        if (this.bossPrepOvercharger) {
+            this.bossWeaponDamage = Math.max(1, Math.round(this.bossWeaponDamage * 1.25))
+        }
+        if (this.bossPrepStabilizer) {
+            this.bossWeaponHitWindow += 18
+        }
         this.bossLaserY = this.canvas.height / 2
+        this.bossLaserCooldown = this.bossWeaponCooldownBase
         this.bossLaserCooldownTimer = 0
         this.bossShotFlashTime = 0
         this.bossProjectiles = []
-        this.bossAttackTimer = this.bossAttackCooldown
+        this.bossHazardLanes = []
+        this.bossHazardTimer = 0
+        this.bossAttackTimer = this.getBossPhaseAttackCooldown()
         this.bossPlayerHits = 0
+        this.bossMaxPlayerHits = 3 + (this.hasProgressNode("emergencyPlating") ? 1 : 0)
         this.bossHitFlashTime = 0
+        this.bossPhase = 1
+        this.bossPhaseChoiceActive = false
+        this.bossPhaseTwoChoiceGiven = false
+        this.bossPhaseThreeChoiceGiven = false
+        this.bossPhaseChoices = []
+        this.bossPhaseBuffDamage = 0
+        this.bossPhaseBuffHitWindow = 0
+        this.bossPhaseBuffCooldownMultiplier = 1
+        this.bossPhaseBuffExtraLives = 0
         this.targets = []
         this.lasers = []
         this.pulseShockwaves = []
@@ -2288,10 +3736,51 @@ export class Game {
             new FloatingText(
                 this.gridX + this.gridWidth / 2,
                 this.canvas.height * 0.28,
-                "WORLD GATE BOSS",
+                this.getWorldBossName().toUpperCase(),
                 "#ff9ca8"
             )
         )
+
+    }
+
+    applyBossPlayerHit(label = "HIT", color = "#ff8c8c") {
+
+        const playerX = 70
+        const playerY = this.bossLaserY
+
+        if (this.bossPrepShield) {
+            this.bossPrepShield = false
+            this.bossHitFlashTime = 0.16
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    playerX + 30 + ((Math.random() - 0.5) * 12),
+                    playerY + ((Math.random() - 0.5) * 14),
+                    "SHIELD",
+                    "#9bf3ff"
+                )
+            )
+            return false
+        }
+
+        this.bossPlayerHits += 1
+        this.bossHitFlashTime = 0.2
+
+        this.floatingTexts.push(
+            new FloatingText(
+                playerX + 30 + ((Math.random() - 0.5) * 12),
+                playerY + ((Math.random() - 0.5) * 14),
+                label,
+                color
+            )
+        )
+
+        if (this.bossPlayerHits >= this.bossMaxPlayerHits) {
+            this.failBossFight()
+            return true
+        }
+
+        return false
 
     }
 
@@ -2299,29 +3788,107 @@ export class Game {
 
         if (!this.bossFightActive) return
 
-        this.bossFightTimer = Math.max(0, this.bossFightTimer - delta)
-        this.bossLaserCooldownTimer = Math.max(0, this.bossLaserCooldownTimer - delta)
+        const bossConfig = this.activeBossConfig || this.getCurrentWorldBossConfig()
+        const attackStyle = (bossConfig && bossConfig.attackStyle) || "calibration"
+        const healthRatio = this.bossMaxHealth > 0 ? this.bossHealth / this.bossMaxHealth : 0
+        if (!this.bossPhaseChoiceActive) {
+            if (!this.bossPhaseTwoChoiceGiven && healthRatio <= 0.66) {
+                this.bossPhase = 2
+                this.bossPhaseTwoChoiceGiven = true
+                this.openBossPhaseChoice()
+            } else if (!this.bossPhaseThreeChoiceGiven && healthRatio <= 0.33) {
+                this.bossPhase = 3
+                this.bossPhaseThreeChoiceGiven = true
+                this.openBossPhaseChoice()
+            }
+        }
+
         this.bossShotFlashTime = Math.max(0, this.bossShotFlashTime - delta)
         this.bossHitFlashTime = Math.max(0, this.bossHitFlashTime - delta)
         this.bossLaserY = Math.max(
             this.bossLaserMinY,
             Math.min(this.bossLaserMaxY, this.mouseY)
         )
+        const phaseSpeedBase = this.bossWeaponType === "heavy"
+            ? 2.4
+            : this.bossWeaponType === "pulse"
+                ? 5.4
+                : this.bossWeaponType === "scatter"
+                    ? 4.8
+                    : this.bossWeaponType === "plasma"
+                        ? 4.2
+                        : 3.4
+        this.bossBeamVisualPhase += delta * (phaseSpeedBase + (this.laserFireRate * 0.2))
+
+        for (const text of this.floatingTexts) {
+            text.update(delta)
+        }
+        this.floatingTexts = this.floatingTexts.filter(t => t.life > 0)
+
+        if (this.bossPhaseChoiceActive) {
+            return
+        }
+
+        this.bossFightTimer = Math.max(0, this.bossFightTimer - delta)
+        this.bossLaserCooldownTimer = Math.max(0, this.bossLaserCooldownTimer - delta)
+
+        if (this.autoFireUnlocked && this.autoFireEnabled && !this.bossPhaseChoiceActive) {
+            this.tryFireBossWeapon()
+        }
+
+        const playerY = this.bossLaserY
+        if (attackStyle === "cryo" || attackStyle === "void") {
+            this.bossHazardTimer -= delta
+            if (this.bossHazardTimer <= 0) {
+                if (attackStyle === "cryo") {
+                    this.spawnBossHazardLane("cryo", playerY + ((Math.random() - 0.5) * 110))
+                    this.bossHazardTimer = 1.5 + (Math.random() * 0.7)
+                } else {
+                    const laneCount = this.bossPhase >= 3 && Math.random() < 0.4 ? 2 : 1
+                    for (let i = 0; i < laneCount; i++) {
+                        this.spawnBossHazardLane("void", playerY + ((Math.random() - 0.5) * 160))
+                    }
+                    this.bossHazardTimer = 1.2 + (Math.random() * 1.0)
+                }
+            }
+        } else {
+            this.bossHazardLanes = []
+            this.bossHazardTimer = 0
+        }
+
+        for (let i = this.bossHazardLanes.length - 1; i >= 0; i--) {
+            const lane = this.bossHazardLanes[i]
+            lane.life -= delta
+            lane.grace = Math.max(0, lane.grace - delta)
+            lane.hitCooldown = Math.max(0, lane.hitCooldown - delta)
+
+            if (lane.life <= 0) {
+                this.bossHazardLanes.splice(i, 1)
+                continue
+            }
+
+            const inLane = Math.abs(playerY - lane.y) <= (lane.height / 2)
+            if (inLane && lane.grace <= 0 && lane.hitCooldown <= 0) {
+                lane.hitCooldown = 0.9
+                lane.life = 0
+
+                const laneLabel = lane.style === "cryo" ? "FROST" : "RIFT"
+                const laneColor = lane.style === "cryo" ? "#8be8ff" : "#ff92ff"
+                if (this.applyBossPlayerHit(laneLabel, laneColor)) {
+                    return
+                }
+            }
+        }
 
         this.bossAttackTimer -= delta
         if (this.bossAttackTimer <= 0) {
-            this.bossAttackTimer = this.bossAttackCooldown
-            this.bossProjectiles.push({
-                x: (this.canvas.width / 2) - 70,
-                y: this.bossLaserMinY + (Math.random() * (this.bossLaserMaxY - this.bossLaserMinY)),
-                radius: 10 + (Math.random() * 4),
-                speed: 280 + (Math.random() * 80),
-                life: 4
-            })
+            const followupDelay = this.spawnBossPhaseAttack()
+            this.bossAttackTimer = Number.isFinite(followupDelay)
+                ? followupDelay
+                : this.getBossPhaseAttackCooldown()
         }
 
         const playerX = 70
-        const playerY = this.bossLaserY
         const playerRadius = 16
 
         for (let i = this.bossProjectiles.length - 1; i >= 0; i--) {
@@ -2339,29 +3906,11 @@ export class Game {
             const hitDistance = projectile.radius + playerRadius
             if ((dx * dx) + (dy * dy) <= (hitDistance * hitDistance)) {
                 this.bossProjectiles.splice(i, 1)
-                this.bossPlayerHits += 1
-                this.bossHitFlashTime = 0.2
-
-                this.floatingTexts.push(
-                    new FloatingText(
-                        playerX + 30 + ((Math.random() - 0.5) * 12),
-                        playerY + ((Math.random() - 0.5) * 14),
-                        "HIT",
-                        "#ff8c8c"
-                    )
-                )
-
-                if (this.bossPlayerHits >= this.bossMaxPlayerHits) {
-                    this.failBossFight()
+                if (this.applyBossPlayerHit("HIT", "#ff8c8c")) {
                     return
                 }
             }
         }
-
-        for (const text of this.floatingTexts) {
-            text.update(delta)
-        }
-        this.floatingTexts = this.floatingTexts.filter(t => t.life > 0)
 
         if (this.bossFightTimer <= 0) {
             this.failBossFight()
@@ -2373,19 +3922,48 @@ export class Game {
 
         this.bossFightActive = false
         this.gameState = GAME_STATE_PLAYING
+        this.runBossWins += 1
+        const fragmentReward = this.getBossFragmentReward()
+        this.coreFragments += fragmentReward
+        this.runCoreFragmentsEarned += fragmentReward
         this.pendingWorldLevel = null
         this.bossTargetWorld = null
+        this.activeBossConfig = null
         this.bossHealth = 0
         this.bossMaxHealth = 0
         this.bossFightTimer = 0
         this.bossLaserCooldownTimer = 0
         this.bossShotFlashTime = 0
         this.bossProjectiles = []
+        this.bossHazardLanes = []
+        this.bossHazardTimer = 0
         this.bossAttackTimer = 0
         this.bossPlayerHits = 0
+        this.bossMaxPlayerHits = 3
         this.bossHitFlashTime = 0
+        this.bossPhase = 1
+        this.bossPhaseChoiceActive = false
+        this.bossPhaseTwoChoiceGiven = false
+        this.bossPhaseThreeChoiceGiven = false
+        this.bossPhaseChoices = []
+        this.bossPhaseBuffDamage = 0
+        this.bossPhaseBuffHitWindow = 0
+        this.bossPhaseBuffCooldownMultiplier = 1
+        this.bossPhaseBuffExtraLives = 0
+        this.bossPrepShield = false
+        this.bossPrepOvercharger = false
+        this.bossPrepStabilizer = false
 
         this.advanceWorld()
+
+        this.floatingTexts.push(
+            new FloatingText(
+                this.gridX + (this.gridWidth * 0.5),
+                this.canvas.height * 0.58,
+                "+" + fragmentReward + " CORE FRAGMENT" + (fragmentReward === 1 ? "" : "S"),
+                "#ffd87a"
+            )
+        )
 
     }
 
@@ -2393,20 +3971,38 @@ export class Game {
 
         this.bossFightActive = false
         this.gameState = GAME_STATE_PLAYING
-        this.transportCharge = Math.floor(this.transportCharge * 0.5)
+        this.runBossLosses += 1
+        const transportChargeRetained = this.hasProgressNode("resonanceBuffer") ? 0.65 : 0.5
+        this.transportCharge = Math.floor(this.transportCharge * transportChargeRetained)
         this.transportReady = this.transportCharge >= this.transportChargeRequired
         this.worldGatePurchased = false
         this.pendingWorldLevel = null
         this.bossTargetWorld = null
+        this.activeBossConfig = null
         this.bossHealth = 0
         this.bossMaxHealth = 0
         this.bossFightTimer = 0
         this.bossLaserCooldownTimer = 0
         this.bossShotFlashTime = 0
         this.bossProjectiles = []
+        this.bossHazardLanes = []
+        this.bossHazardTimer = 0
         this.bossAttackTimer = 0
         this.bossPlayerHits = 0
+        this.bossMaxPlayerHits = 3
         this.bossHitFlashTime = 0
+        this.bossPhase = 1
+        this.bossPhaseChoiceActive = false
+        this.bossPhaseTwoChoiceGiven = false
+        this.bossPhaseThreeChoiceGiven = false
+        this.bossPhaseChoices = []
+        this.bossPhaseBuffDamage = 0
+        this.bossPhaseBuffHitWindow = 0
+        this.bossPhaseBuffCooldownMultiplier = 1
+        this.bossPhaseBuffExtraLives = 0
+        this.bossPrepShield = false
+        this.bossPrepOvercharger = false
+        this.bossPrepStabilizer = false
         this.transportAnimating = false
         this.transportAnimationTime = 0
 
@@ -2415,6 +4011,7 @@ export class Game {
     resetProgression() {
 
         this.setPointsRaw(0)
+        this.resetRunTelemetry()
 
         this.clickDamage = 1
         this.clickUpgradeLevel = 0
@@ -2452,16 +4049,32 @@ export class Game {
 
         this.laserOvercharge = 0
         this.worldGatePurchased = false
+        this.bossPrepShield = false
+        this.bossPrepOvercharger = false
+        this.bossPrepStabilizer = false
         this.pendingWorldLevel = null
         this.bossTargetWorld = null
+        this.activeBossConfig = null
         this.bossFightActive = false
         this.bossHealth = 0
         this.bossMaxHealth = 0
         this.bossFightTimer = 0
         this.bossProjectiles = []
+        this.bossHazardLanes = []
+        this.bossHazardTimer = 0
         this.bossAttackTimer = 0
         this.bossPlayerHits = 0
+        this.bossMaxPlayerHits = 3
         this.bossHitFlashTime = 0
+        this.bossPhase = 1
+        this.bossPhaseChoiceActive = false
+        this.bossPhaseTwoChoiceGiven = false
+        this.bossPhaseThreeChoiceGiven = false
+        this.bossPhaseChoices = []
+        this.bossPhaseBuffDamage = 0
+        this.bossPhaseBuffHitWindow = 0
+        this.bossPhaseBuffCooldownMultiplier = 1
+        this.bossPhaseBuffExtraLives = 0
         this.targets = []
         this.lasers = []
         this.floatingTexts = []
@@ -2594,11 +4207,15 @@ export class Game {
                 )
 
                 target.hitFlashTime = target.hitFlashDuration
+                const previousHealth = target.health
                 target.health -= this.clickDamage
+                const clickDamageDealt = Math.max(0, previousHealth - Math.max(0, target.health))
+                this.recordDamageDealt(clickDamageDealt)
 
                 if (target.health <= 0) {
                     this.particleSystem.spawnExplosion(target.x, target.y, 12, "#ffb84d")
                     this.points += target.value
+                    this.runKills += 1
                     this.floatingTexts.push(
                         new FloatingText(
                             target.x + (Math.random() - 0.5) * 10,
@@ -2628,22 +4245,31 @@ export class Game {
         }
     }
 
-    handleBossFightClick() {
+    tryFireBossWeapon() {
 
-        if (!this.bossFightActive) return
-        if (this.transportAnimating) return
-        if (this.bossLaserCooldownTimer > 0) return
+        if (!this.bossFightActive) return false
+        if (this.transportAnimating) return false
+        if (this.bossPhaseChoiceActive) return false
+        if (this.bossLaserCooldownTimer > 0) return false
 
-        this.bossLaserCooldownTimer = this.bossLaserCooldown
+        const effectiveCooldown = Math.max(
+            0.04,
+            (this.bossWeaponCooldownBase || this.bossLaserCooldown || 0.18) * this.bossPhaseBuffCooldownMultiplier
+        )
+        this.bossLaserCooldown = effectiveCooldown
+        this.bossLaserCooldownTimer = effectiveCooldown
         this.bossShotFlashTime = 0.08
 
         const bossX = this.canvas.width / 2
         const bossY = this.canvas.height / 2
-        const hit = Math.abs(this.bossLaserY - bossY) <= 80
+        const hitWindow = (this.bossWeaponHitWindow || 80) + this.bossPhaseBuffHitWindow
+        const hit = Math.abs(this.bossLaserY - bossY) <= hitWindow
 
         if (hit) {
-            const damage = Math.max(1, this.laserStrength || this.clickDamage)
+            const baseDamage = this.bossWeaponDamage || this.clickDamage
+            const damage = Math.max(1, Math.round(baseDamage * (1 + this.bossPhaseBuffDamage)))
             this.bossHealth = Math.max(0, this.bossHealth - damage)
+            this.recordDamageDealt(damage)
 
             this.floatingTexts.push(
                 new FloatingText(
@@ -2668,6 +4294,36 @@ export class Game {
             )
         }
 
+        return true
+
+    }
+
+    handleBossFightClick(mouseX = this.mouseX, mouseY = this.mouseY) {
+
+        if (!this.bossFightActive) return
+        if (this.transportAnimating) return
+        if (this.bossPhaseChoiceActive) {
+            const choiceCards = this.getBossPhaseChoiceCards()
+            for (const card of choiceCards) {
+                if (!this.isInsideButton(mouseX, mouseY, card)) {
+                    continue
+                }
+
+                this.applyBossPhaseChoice(card.choice.id)
+                this.floatingTexts.push(
+                    new FloatingText(
+                        this.canvas.width / 2,
+                        this.canvas.height / 2 - 34,
+                        card.choice.title + " Applied",
+                        "#b8c7ff"
+                    )
+                )
+                return
+            }
+            return
+        }
+        this.tryFireBossWeapon()
+
     }
 
     start() {
@@ -2689,6 +4345,30 @@ export class Game {
     }
 
     update(delta) {
+
+        if (this.gameState === GAME_STATE_PLAYING || this.gameState === GAME_STATE_BOSS) {
+            this.runTime += delta
+            this.recentDamageWindow += delta
+
+            if (this.recentDamageWindow > 3) {
+                const normalization = 3 / this.recentDamageWindow
+                this.recentDamageDealt *= normalization
+                this.recentDamageWindow = 3
+            }
+
+            if (this.firstLaserUnlockTime == null && this.hasLaser) {
+                this.firstLaserUnlockTime = this.runTime
+            }
+            if (this.transportReadyTime == null && this.transportReady) {
+                this.transportReadyTime = this.runTime
+            }
+            if (
+                this.worldGateAffordableTime == null &&
+                this.points >= this.getWorldGateCost()
+            ) {
+                this.worldGateAffordableTime = this.runTime
+            }
+        }
 
         if (this.gameState === GAME_STATE_TITLE) {
             this.updateTitleScene(delta)
@@ -2717,6 +4397,14 @@ export class Game {
         }
 
         if (this.showInfoScreen) {
+            return
+        }
+
+        if (this.showProgressMatrix) {
+            return
+        }
+
+        if (this.showArchivesMenu) {
             return
         }
 
@@ -2781,8 +4469,21 @@ export class Game {
             target.update(scaledDelta) 
             this.applyGravityWellsToTarget(target, scaledDelta)
         }
+
+        let healthBeforeCollision = 0
+        for (const target of this.targets) {
+            healthBeforeCollision += Math.max(0, target.health || 0)
+        }
+
         this.targets = this.targets.filter(target => !target.shouldRemove)
         this.collisionSystem.check()
+
+        let healthAfterCollision = 0
+        for (const target of this.targets) {
+            healthAfterCollision += Math.max(0, target.health || 0)
+        }
+        this.recordDamageDealt(Math.max(0, healthBeforeCollision - healthAfterCollision))
+
         this.particleSystem.update(scaledDelta)
 
         for (let text of this.floatingTexts) {
@@ -2858,11 +4559,26 @@ export class Game {
             if (this.showTargetIndex) {
                 this.drawTargetIndex(this.ctx)
             }
+            if (this.showProgressMatrix) {
+                this.drawProgressMatrix(this.ctx)
+            }
+            if (this.showBalanceOverlay) {
+                this.drawBalanceOverlay(this.ctx)
+            }
+            if (this.showArchivesMenu) {
+                this.drawArchivesMenu(this.ctx)
+            }
             return
         }
 
         if (this.gameState === GAME_STATE_BOSS) {
             this.drawBossFightScreen(this.ctx)
+            if (this.showBalanceOverlay) {
+                this.drawBalanceOverlay(this.ctx)
+            }
+            if (this.showArchivesMenu) {
+                this.drawArchivesMenu(this.ctx)
+            }
             return
         }
 
@@ -2918,6 +4634,87 @@ export class Game {
         if (this.showTargetIndex) {
             this.drawTargetIndex(this.ctx)
         }
+
+        if (this.showProgressMatrix) {
+            this.drawProgressMatrix(this.ctx)
+        }
+        if (this.showBalanceOverlay) {
+            this.drawBalanceOverlay(this.ctx)
+        }
+        if (this.showArchivesMenu) {
+            this.drawArchivesMenu(this.ctx)
+        }
+    }
+
+    drawBalanceOverlay(ctx) {
+
+        const panelX = this.gridX + 14
+        const panelY = 14
+        const panelWidth = Math.min(380, this.canvas.width - panelX - 14)
+        const lineHeight = 15
+        const gateCost = this.getWorldGateCost()
+        const prepTotalCost =
+            this.getBossPrepCost(BOSS_PREP_SHIELD_COST) +
+            this.getBossPrepCost(BOSS_PREP_OVERCHARGER_COST) +
+            this.getBossPrepCost(BOSS_PREP_STABILIZER_COST)
+        const transportEfficiency = (this.hasProgressNode("transportEfficiency1") ? 10 : 0) +
+            (this.hasProgressNode("transportEfficiency2") ? 15 : 0)
+        const gateReduction = (this.hasProgressNode("gateCalibration1") ? 10 : 0) +
+            (this.hasProgressNode("gateCalibration2") ? 15 : 0)
+        const bossDamageBonus = this.hasProgressNode("coreBreaker") ? 10 : 0
+        const prepDiscount = this.hasProgressNode("prepLogistics") ? 10 : 0
+        const dpsEstimate = this.getRecentDpsEstimate()
+        const bossCooldown = this.bossFightActive
+            ? Math.max(
+                0.04,
+                (this.bossWeaponCooldownBase || this.bossLaserCooldown || 0.18) * this.bossPhaseBuffCooldownMultiplier
+            )
+            : (this.bossWeaponCooldownBase || 0.18)
+        const lines = [
+            "BALANCE OVERLAY",
+            "Run Time: " + this.formatBalanceOverlayTime(this.runTime),
+            "Points Earned: " + Math.floor(this.runPointsEarned),
+            "Kills: " + this.runKills,
+            "Recent DPS: " + dpsEstimate.toFixed(1),
+            "First Laser: " + this.formatBalanceOverlayTime(this.firstLaserUnlockTime),
+            "Transport Ready: " + this.formatBalanceOverlayTime(this.transportReadyTime),
+            "Gate Affordable: " + this.formatBalanceOverlayTime(this.worldGateAffordableTime),
+            "Gate Cost: " + gateCost,
+            "Boss Attempts: " + this.runBossAttempts,
+            "Boss Wins: " + this.runBossWins,
+            "Boss Losses: " + this.runBossLosses,
+            "Prep Total Cost: " + prepTotalCost,
+            "Boss Weapon Damage: " + Math.max(1, Math.round(this.bossWeaponDamage || this.laserStrength || 1)),
+            "Boss Weapon Cooldown: " + bossCooldown.toFixed(3) + "s",
+            "Fragments Earned: " + this.runCoreFragmentsEarned,
+            "Core Fragments Total: " + Math.floor(this.coreFragments),
+            "Matrix Transport Eff: +" + transportEfficiency + "%",
+            "Matrix Gate Reduction: -" + gateReduction + "%",
+            "Matrix Boss Damage: +" + bossDamageBonus + "%",
+            "Matrix Prep Discount: -" + prepDiscount + "%"
+        ]
+        const panelHeight = 16 + (lines.length * lineHeight) + 12
+
+        ctx.save()
+        this.drawRoundedRectPath(ctx, panelX, panelY, panelWidth, panelHeight, 10)
+        ctx.fillStyle = "rgba(6,10,20,0.78)"
+        ctx.fill()
+        this.drawRoundedRectPath(ctx, panelX, panelY, panelWidth, panelHeight, 10)
+        ctx.strokeStyle = "rgba(108,186,255,0.45)"
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        ctx.textAlign = "left"
+        ctx.textBaseline = "top"
+        ctx.font = "12px monospace"
+
+        for (let i = 0; i < lines.length; i++) {
+            ctx.fillStyle = i === 0 ? "#9dd6ff" : "rgba(228,240,255,0.92)"
+            ctx.fillText(lines[i], panelX + 12, panelY + 10 + (i * lineHeight))
+        }
+
+        ctx.restore()
+
     }
 
     drawBossFightScreen(ctx) {
@@ -2932,28 +4729,141 @@ export class Game {
 
         const centerX = this.canvas.width / 2
         const centerY = this.canvas.height / 2
+        const bossConfig = this.activeBossConfig || this.getCurrentWorldBossConfig()
+        const attackStyle = (bossConfig && bossConfig.attackStyle) || "calibration"
+        const phase = this.bossPhase || 1
+        const phaseTime = performance.now() * 0.001
+        const phasePulse = 0.5 + Math.sin(phaseTime * (phase >= 3 ? 6.2 : phase >= 2 ? 4.8 : 3.6)) * 0.5
+
+        const phaseVisuals = {
+            coreColor: bossConfig.bossCoreColor || "#8f1d34",
+            haloColor: bossConfig.bossHaloColor || "#ff4d6d",
+            centerColor: bossConfig.bossCenterColor || "#ffd7de",
+            screenTint: bossConfig.arenaTint || "rgba(78,12,28,0.1)",
+            outerGlowAlpha: phase >= 3 ? 0.3 : phase >= 2 ? 0.24 : 0.18,
+            projectileGlowMultiplier: phase >= 3 ? 1.55 : phase >= 2 ? 1.25 : 1,
+            projectileRadiusMultiplier: phase >= 3 ? 1.2 : phase >= 2 ? 1.08 : 1
+        }
+        const styleProjectileVisuals = attackStyle === "storm"
+            ? {
+                haloColor: "#ff78b5",
+                coreColor: "#ffd6f4",
+                centerColor: "#fff3ff",
+                glowBoost: 1.18
+            }
+            : attackStyle === "cryo"
+                ? {
+                    haloColor: "#66dfff",
+                    coreColor: "#9cecff",
+                    centerColor: "#eaffff",
+                    glowBoost: 1.08
+                }
+                : attackStyle === "void"
+                    ? {
+                        haloColor: "#ff6bda",
+                        coreColor: "#ff9bf0",
+                        centerColor: "#ffe8ff",
+                        glowBoost: 1.28
+                    }
+                    : {
+                        haloColor: phaseVisuals.haloColor,
+                        coreColor: phaseVisuals.coreColor,
+                        centerColor: phaseVisuals.centerColor,
+                        glowBoost: 1
+                    }
 
         ctx.save()
-        ctx.globalAlpha = 0.18
-        ctx.fillStyle = "#ff4d6d"
+        const tintIntensity = phase >= 3 ? 1.75 : phase >= 2 ? 1.35 : 1
+        ctx.globalAlpha = tintIntensity
+        ctx.fillStyle = phaseVisuals.screenTint
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+        const vignetteGradient = ctx.createRadialGradient(
+            centerX,
+            centerY,
+            Math.min(this.canvas.width, this.canvas.height) * 0.14,
+            centerX,
+            centerY,
+            Math.max(this.canvas.width, this.canvas.height) * 0.58
+        )
+        vignetteGradient.addColorStop(0, "rgba(255,255,255,0)")
+        vignetteGradient.addColorStop(1, phase >= 3 ? "rgba(65,0,25,0.3)" : phase >= 2 ? "rgba(45,0,20,0.2)" : "rgba(28,0,14,0.14)")
+        ctx.fillStyle = vignetteGradient
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+        ctx.restore()
+
+        ctx.save()
+        const outerAuraRadius = 120 + ((phase - 1) * 20) + (phasePulse * (phase >= 3 ? 20 : phase >= 2 ? 12 : 8))
+        ctx.globalAlpha = phaseVisuals.outerGlowAlpha + (phasePulse * 0.08)
+        ctx.fillStyle = phaseVisuals.haloColor
         ctx.beginPath()
-        ctx.arc(centerX, centerY, 120, 0, Math.PI * 2)
+        ctx.arc(centerX, centerY, outerAuraRadius, 0, Math.PI * 2)
         ctx.fill()
 
+        if (phase >= 2) {
+            ctx.globalAlpha = (phase >= 3 ? 0.2 : 0.14) + (phasePulse * 0.06)
+            ctx.fillStyle = phaseVisuals.haloColor
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, outerAuraRadius + (phase >= 3 ? 34 : 22), 0, Math.PI * 2)
+            ctx.fill()
+        }
+
         ctx.globalAlpha = 0.95
-        ctx.fillStyle = "#8f1d34"
+        ctx.fillStyle = phaseVisuals.coreColor
+        const shellRadius = 72 + ((phase - 1) * 6) + (phasePulse * (phase >= 3 ? 8 : 4))
         ctx.beginPath()
-        ctx.arc(centerX, centerY, 72, 0, Math.PI * 2)
+        ctx.arc(centerX, centerY, shellRadius, 0, Math.PI * 2)
         ctx.fill()
-        ctx.strokeStyle = "#ff7f97"
+        ctx.strokeStyle = phaseVisuals.haloColor
         ctx.lineWidth = 4
         ctx.stroke()
 
-        ctx.fillStyle = "#ffd7de"
+        ctx.fillStyle = phaseVisuals.centerColor
+        const coreRadius = 26 + (phase >= 3 ? 4 : phase >= 2 ? 2 : 0) + (phasePulse * (phase >= 3 ? 2.5 : 1.2))
         ctx.beginPath()
-        ctx.arc(centerX, centerY, 26, 0, Math.PI * 2)
+        ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2)
         ctx.fill()
         ctx.restore()
+
+        if (this.bossHazardLanes.length > 0) {
+            ctx.save()
+            const laneX = 24
+            const laneWidth = this.canvas.width - 48
+
+            for (const lane of this.bossHazardLanes) {
+                const lifeRatio = lane.maxLife > 0
+                    ? Math.max(0, Math.min(1, lane.life / lane.maxLife))
+                    : 0
+                const laneTop = lane.y - (lane.height / 2)
+                const laneBottom = laneTop + lane.height
+                const laneGradient = ctx.createLinearGradient(0, laneTop, 0, laneBottom)
+                const isCryo = lane.style === "cryo"
+
+                if (isCryo) {
+                    laneGradient.addColorStop(0, "rgba(0,0,0,0)")
+                    laneGradient.addColorStop(0.5, "rgba(120,236,255,0.55)")
+                    laneGradient.addColorStop(1, "rgba(0,0,0,0)")
+                } else {
+                    laneGradient.addColorStop(0, "rgba(0,0,0,0)")
+                    laneGradient.addColorStop(0.5, "rgba(255,120,240,0.5)")
+                    laneGradient.addColorStop(1, "rgba(0,0,0,0)")
+                }
+
+                ctx.globalAlpha = (0.34 + ((phase - 1) * 0.08)) * Math.max(0.25, lifeRatio)
+                if (lane.grace > 0) {
+                    ctx.globalAlpha *= 0.72
+                }
+                ctx.fillStyle = laneGradient
+                ctx.fillRect(laneX, laneTop, laneWidth, lane.height)
+
+                ctx.globalAlpha = (0.42 + ((phase - 1) * 0.07)) * Math.max(0.22, lifeRatio)
+                ctx.strokeStyle = isCryo ? "rgba(166,245,255,0.8)" : "rgba(255,158,255,0.78)"
+                ctx.lineWidth = 1.2
+                ctx.strokeRect(laneX, laneTop + 1, laneWidth, Math.max(2, lane.height - 2))
+            }
+
+            ctx.restore()
+        }
 
         const emitterX = 70
         const emitterY = this.bossLaserY
@@ -2996,62 +4906,43 @@ export class Game {
             const flashRatio = this.bossShotFlashTime / 0.08
             const beamStartX = emitterX + 24
             const beamEndX = this.canvas.width - 80
-
-            ctx.save()
-            ctx.globalCompositeOperation = "lighter"
-            ctx.strokeStyle = "rgba(91,173,255,0.25)"
-            ctx.lineWidth = 16
-            ctx.beginPath()
-            ctx.moveTo(beamStartX, emitterY)
-            ctx.lineTo(beamEndX, emitterY)
-            ctx.stroke()
-
-            ctx.strokeStyle = "rgba(155,92,255,0.28)"
-            ctx.lineWidth = 8
-            ctx.beginPath()
-            ctx.moveTo(beamStartX, emitterY)
-            ctx.lineTo(beamEndX, emitterY)
-            ctx.stroke()
-
-            ctx.globalAlpha = flashRatio
-            ctx.strokeStyle = "#d9f6ff"
-            ctx.lineWidth = 3
-            ctx.beginPath()
-            ctx.moveTo(beamStartX, emitterY)
-            ctx.lineTo(beamEndX, emitterY)
-            ctx.stroke()
-            ctx.restore()
+            this.drawBossFightBeam(
+                ctx,
+                emitterX,
+                emitterY,
+                beamStartX,
+                beamEndX,
+                flashRatio
+            )
         }
 
         for (const projectile of this.bossProjectiles) {
             ctx.save()
             ctx.globalCompositeOperation = "lighter"
 
-            const glowGradient = ctx.createRadialGradient(
-                projectile.x,
-                projectile.y,
-                0,
-                projectile.x,
-                projectile.y,
-                projectile.radius * 2.1
-            )
-            glowGradient.addColorStop(0, "rgba(255,110,140,0.9)")
-            glowGradient.addColorStop(0.55, "rgba(255,70,110,0.45)")
-            glowGradient.addColorStop(1, "rgba(255,70,110,0)")
-
-            ctx.fillStyle = glowGradient
+            const drawRadius = projectile.radius * phaseVisuals.projectileRadiusMultiplier
+            const styleFlicker = attackStyle === "void"
+                ? 0.82 + (Math.sin((phaseTime * 9) + (projectile.x * 0.02)) * 0.18)
+                : 1
+            const projectileAlpha = Number.isFinite(projectile.alpha) ? projectile.alpha : 1
+            const glowRadius = drawRadius * 2.1 * phaseVisuals.projectileGlowMultiplier * styleProjectileVisuals.glowBoost
+            ctx.globalAlpha = (0.26 + ((phase - 1) * 0.07)) * projectileAlpha * styleFlicker
+            ctx.fillStyle = styleProjectileVisuals.haloColor
             ctx.beginPath()
-            ctx.arc(projectile.x, projectile.y, projectile.radius * 2.1, 0, Math.PI * 2)
+            ctx.arc(projectile.x, projectile.y, glowRadius, 0, Math.PI * 2)
             ctx.fill()
 
-            ctx.fillStyle = "#ff5a7d"
+            ctx.globalAlpha = 0.94 * projectileAlpha * styleFlicker
+            ctx.fillStyle = styleProjectileVisuals.coreColor
             ctx.beginPath()
-            ctx.arc(projectile.x, projectile.y, projectile.radius, 0, Math.PI * 2)
+            ctx.arc(projectile.x, projectile.y, drawRadius, 0, Math.PI * 2)
             ctx.fill()
 
-            ctx.strokeStyle = "rgba(255,200,220,0.9)"
-            ctx.lineWidth = 1.5
-            ctx.stroke()
+            ctx.globalAlpha = 0.95 * projectileAlpha
+            ctx.fillStyle = styleProjectileVisuals.centerColor
+            ctx.beginPath()
+            ctx.arc(projectile.x, projectile.y, drawRadius * 0.45, 0, Math.PI * 2)
+            ctx.fill()
             ctx.restore()
         }
 
@@ -3074,8 +4965,12 @@ export class Game {
         ctx.textAlign = "center"
         ctx.textBaseline = "middle"
         ctx.fillStyle = "#f4eaff"
-        ctx.font = "bold 38px Arial"
-        ctx.fillText("WORLD GATE BOSS", centerX, 48)
+        ctx.font = "bold 34px Arial"
+        ctx.fillText(this.getWorldBossName(), centerX, 46)
+
+        ctx.fillStyle = "rgba(235,227,255,0.9)"
+        ctx.font = "bold 15px Arial"
+        ctx.fillText(this.getWorldBossSubtitle(), centerX, 68)
 
         ctx.fillStyle = "rgba(255,255,255,0.9)"
         ctx.font = "bold 16px Arial"
@@ -3094,6 +4989,35 @@ export class Game {
             centerX,
             barY + barHeight + 68
         )
+        ctx.fillText(
+            "Phase: " + this.bossPhase,
+            centerX,
+            barY + barHeight + 90
+        )
+        const phaseStatus = this.bossPhase >= 3
+            ? "Overload"
+            : this.bossPhase >= 2
+                ? "Destabilized"
+                : "Calibration"
+        ctx.fillText(
+            "Status: " + phaseStatus,
+            centerX,
+            barY + barHeight + 112
+        )
+        const bossWeaponLabel = this.bossWeaponType === "plasma"
+            ? "Plasma Laser"
+            : this.bossWeaponType === "pulse"
+                ? "Pulse Laser"
+                : this.bossWeaponType === "scatter"
+                    ? "Scatter Laser"
+                    : this.bossWeaponType === "heavy"
+                        ? "Heavy Laser"
+                        : "Simple Laser"
+        ctx.fillText(
+            "Weapon: " + bossWeaponLabel,
+            centerX,
+            barY + barHeight + 134
+        )
 
         ctx.font = "14px Arial"
         ctx.fillStyle = "rgba(230,240,255,0.85)"
@@ -3102,6 +5026,68 @@ export class Game {
             centerX,
             this.canvas.height - 42
         )
+
+        if (this.bossPhaseChoiceActive) {
+            const choiceCards = this.getBossPhaseChoiceCards()
+            const panelWidth = Math.min(620, this.canvas.width - 140)
+            const panelHeight = Math.min(440, this.canvas.height - 120)
+            const panelX = (this.canvas.width - panelWidth) / 2
+            const panelY = (this.canvas.height - panelHeight) / 2
+
+            ctx.save()
+            ctx.fillStyle = "rgba(6,10,18,0.76)"
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+            const overlayGradient = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelHeight)
+            overlayGradient.addColorStop(0, "rgba(18,28,50,0.95)")
+            overlayGradient.addColorStop(1, "rgba(10,16,32,0.95)")
+            this.drawRoundedRectPath(ctx, panelX, panelY, panelWidth, panelHeight, 16)
+            ctx.fillStyle = overlayGradient
+            ctx.fill()
+
+            this.drawRoundedRectPath(ctx, panelX, panelY, panelWidth, panelHeight, 16)
+            ctx.strokeStyle = "rgba(155,92,255,0.45)"
+            ctx.lineWidth = 1.2
+            ctx.stroke()
+
+            ctx.fillStyle = "#e8f3ff"
+            ctx.font = "bold 24px Arial"
+            ctx.textAlign = "center"
+            ctx.textBaseline = "middle"
+            ctx.fillText("PHASE " + this.bossPhase + " UPGRADE", centerX, panelY + 48)
+
+            ctx.fillStyle = "rgba(216,228,255,0.9)"
+            ctx.font = "14px Arial"
+            ctx.fillText(
+                "Choose one enhancement before the fight continues",
+                centerX,
+                panelY + 76
+            )
+
+            for (const card of choiceCards) {
+                const hovered = this.isInsideButton(this.mouseX, this.mouseY, card)
+                this.drawUpgradeCard(
+                    ctx,
+                    card.x,
+                    card.y,
+                    card.width,
+                    card.height,
+                    {
+                        title: card.choice.title,
+                        cost: card.choice.description,
+                        level: 0,
+                        canAfford: true,
+                        selected: false,
+                        unlocked: true,
+                        hovered,
+                        flashIntensity: 0,
+                        iconId: "strength",
+                        stackSubtitle: true
+                    }
+                )
+            }
+            ctx.restore()
+        }
 
         for (const text of this.floatingTexts) {
             text.draw(ctx)
@@ -4290,16 +6276,66 @@ export class Game {
             const worldSubtitleY = contentY + 34
             const transportY = contentY + 54
             const statusY = contentY + 76
-            const modifiersLabelY = contentY + 102
+            const showGatePurchaseButton = this.transportReady && !this.worldGatePurchased && !this.transportAnimating
+            const showBossPrep = this.transportReady && this.worldGatePurchased && !this.transportAnimating && !this.bossFightActive
+            const showModifierInsight = this.hasProgressNode("modifierInsight")
+            const shieldCost = this.getBossPrepCost(BOSS_PREP_SHIELD_COST)
+            const overchargerCost = this.getBossPrepCost(BOSS_PREP_OVERCHARGER_COST)
+            const stabilizerCost = this.getBossPrepCost(BOSS_PREP_STABILIZER_COST)
+            const bossInfoLineHeight = 18
+            const bossPrepEntries = [
+                {
+                    title: "Emergency Shield",
+                    cost: shieldCost,
+                    purchased: this.bossPrepShield,
+                    button: this.bossPrepShieldButton
+                },
+                {
+                    title: "Overcharger",
+                    cost: overchargerCost,
+                    purchased: this.bossPrepOvercharger,
+                    button: this.bossPrepOverchargerButton
+                },
+                {
+                    title: "Stabilizer",
+                    cost: stabilizerCost,
+                    purchased: this.bossPrepStabilizer,
+                    button: this.bossPrepStabilizerButton
+                }
+            ]
+            const bossPrepButtonHeight = 30
+            const bossPrepGap = 8
             const modifierLineHeight = 18
             const worldGateCost = this.getWorldGateCost()
+            const transportChargeDisplay = Number.isInteger(this.transportCharge)
+                ? this.transportCharge
+                : this.transportCharge.toFixed(1)
             this.worldGatePurchaseButton.x = contentX
-            this.worldGatePurchaseButton.y = statusY - 14
+            this.worldGatePurchaseButton.y = statusY - 10
             this.worldGatePurchaseButton.width = contentWidth
-            this.worldGatePurchaseButton.height = 24
+            this.worldGatePurchaseButton.height = 30
+            const bossInfoY = showGatePurchaseButton
+                ? this.worldGatePurchaseButton.y + this.worldGatePurchaseButton.height + 18
+                : statusY + 24
+            const bossPrepHeaderY = showModifierInsight ? bossInfoY + (bossInfoLineHeight * 2) + 8 : bossInfoY + 4
+            let prepContentY = bossPrepHeaderY + 14
+            if (showBossPrep) {
+                for (const entry of bossPrepEntries) {
+                    entry.button.x = contentX
+                    entry.button.y = prepContentY
+                    entry.button.width = contentWidth
+                    entry.button.height = bossPrepButtonHeight
+                    prepContentY += bossPrepButtonHeight + bossPrepGap
+                }
+            }
             const modifierEntries = this.activeWorldModifiers.length > 0
                 ? this.activeWorldModifiers
                 : ["none"]
+            const modifiersLabelY = showBossPrep
+                ? prepContentY + 8
+                : showModifierInsight
+                    ? bossInfoY + (bossInfoLineHeight * 2) + 8
+                    : bossInfoY + 24
             const modifiersStartY = modifiersLabelY + 20
             const sectionTop = contentY
             const sectionBottom = modifiersStartY + (modifierEntries.length * modifierLineHeight) + 6
@@ -4322,7 +6358,7 @@ export class Game {
                 )
                 this.ctx.font = "15px Arial"
                 this.ctx.fillText(
-                    "Transport Charge: " + this.transportCharge + " / " + this.transportChargeRequired,
+                    "Transport Charge: " + transportChargeDisplay + " / " + this.transportChargeRequired,
                     contentX,
                     transportY,
                     contentWidth
@@ -4332,19 +6368,59 @@ export class Game {
                     this.ctx.fillStyle = "#6d5fbf"
                     this.ctx.font = "bold 16px Arial"
                     this.ctx.fillText("TRANSPORTING...", contentX, statusY, contentWidth)
-                } else if (this.transportReady && !this.worldGatePurchased) {
-                    this.ctx.fillStyle = this.points >= worldGateCost ? "#0f6a7a" : "rgba(255,255,255,0.7)"
-                    this.ctx.font = "bold 15px Arial"
-                    this.ctx.fillText(
-                        "PURCHASE WORLD GATE: " + worldGateCost,
-                        contentX,
-                        statusY,
-                        contentWidth
+                } else if (showGatePurchaseButton) {
+                    this.drawPanelActionButton(
+                        this.worldGatePurchaseButton,
+                        "PURCHASE WORLD GATE",
+                        worldGateCost,
+                        this.points >= worldGateCost
                     )
                 } else if (this.transportReady && this.worldGatePurchased) {
                     this.ctx.fillStyle = "#0f6a7a"
                     this.ctx.font = "bold 16px Arial"
                     this.ctx.fillText("ACTIVATE TRANSPORT BEAM", contentX, statusY, contentWidth)
+                }
+
+                if (showModifierInsight) {
+                    this.ctx.fillStyle = "rgba(220,235,255,0.78)"
+                    this.ctx.font = "13px Arial"
+                    this.ctx.fillText(
+                        "Next Boss: " + this.getWorldBossName(),
+                        contentX,
+                        bossInfoY,
+                        contentWidth
+                    )
+                    this.ctx.fillText(
+                        "Profile: " + this.getCurrentWorldBossConfig().attackStyle,
+                        contentX,
+                        bossInfoY + bossInfoLineHeight,
+                        contentWidth
+                    )
+                }
+
+                if (showBossPrep) {
+                    this.ctx.fillStyle = "rgba(255,255,255,0.82)"
+                    this.ctx.font = "bold 13px Arial"
+                    this.ctx.fillText("BOSS PREP", contentX, bossPrepHeaderY, contentWidth)
+
+                    for (const entry of bossPrepEntries) {
+                        if (entry.purchased) {
+                            this.drawPanelActionButton(
+                                entry.button,
+                                entry.title,
+                                "BOUGHT",
+                                true,
+                                true
+                            )
+                        } else {
+                            this.drawPanelActionButton(
+                                entry.button,
+                                entry.title,
+                                entry.cost,
+                                this.points >= entry.cost
+                            )
+                        }
+                    }
                 }
 
                 this.ctx.fillStyle = "rgba(255,255,255,0.75)"

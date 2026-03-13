@@ -11,6 +11,9 @@ export const WORLD_POINT_MULTIPLIER_BASE = 1
 export const WORLD_POINT_MULTIPLIER_GROWTH = 1.5
 export const WORLD_GATE_BASE_COST = 10
 export const WORLD_GATE_COST_GROWTH = 2.25
+export const BOSS_PREP_SHIELD_COST = 8000
+export const BOSS_PREP_OVERCHARGER_COST = 10000
+export const BOSS_PREP_STABILIZER_COST = 9000
 export const TRANSPORT_INITIAL_CHARGE_REQUIRED = 10
 export const TRANSPORT_CHARGE_PER_KILL = 1
 export const TRANSPORT_BOSS_CHARGE_BONUS = 20
@@ -50,6 +53,60 @@ export const WORLD_DATA = {
         description: "Collapsed dimensions leak elite signatures and catastrophic pulse events."
     }
 }
+export const WORLD_BOSS_DATA = {
+    1: {
+        name: "Calibration Core",
+        subtitle: "Signal Stability Sentinel",
+        maxHealthMultiplier: 1,
+        phaseAttackCooldowns: [1.25, 0.95, 0.72],
+        projectileSpeedMultiplier: 1,
+        projectileRadiusMultiplier: 1,
+        bossCoreColor: "#8f1d34",
+        bossHaloColor: "#ff4d6d",
+        bossCenterColor: "#ffd7de",
+        arenaTint: "rgba(78,12,28,0.1)",
+        attackStyle: "calibration"
+    },
+    2: {
+        name: "Storm Reactor",
+        subtitle: "Unstable Plasma Intelligence",
+        maxHealthMultiplier: 1.5,
+        phaseAttackCooldowns: [1.12, 0.86, 0.64],
+        projectileSpeedMultiplier: 1.22,
+        projectileRadiusMultiplier: 1.08,
+        bossCoreColor: "#5a1d78",
+        bossHaloColor: "#c05aff",
+        bossCenterColor: "#f1ddff",
+        arenaTint: "rgba(64,18,92,0.16)",
+        attackStyle: "storm"
+    },
+    3: {
+        name: "Cryo Lattice Heart",
+        subtitle: "Frozen Defensive Matrix",
+        maxHealthMultiplier: 2.2,
+        phaseAttackCooldowns: [1.03, 0.78, 0.58],
+        projectileSpeedMultiplier: 1.34,
+        projectileRadiusMultiplier: 1.18,
+        bossCoreColor: "#1b4f8f",
+        bossHaloColor: "#5fd8ff",
+        bossCenterColor: "#e3fbff",
+        arenaTint: "rgba(16,54,88,0.16)",
+        attackStyle: "cryo"
+    },
+    4: {
+        name: "Void Pulse Engine",
+        subtitle: "Collapsed Dimensional Entity",
+        maxHealthMultiplier: 3.1,
+        phaseAttackCooldowns: [0.95, 0.72, 0.52],
+        projectileSpeedMultiplier: 1.5,
+        projectileRadiusMultiplier: 1.28,
+        bossCoreColor: "#5e1642",
+        bossHaloColor: "#ff4fb5",
+        bossCenterColor: "#ffe9f8",
+        arenaTint: "rgba(82,12,56,0.2)",
+        attackStyle: "void"
+    }
+}
 export const WORLD_UPGRADE_TREES = {
     1: ["frequency", "amplitude", "fireRate", "strength"],
     2: ["frequency", "amplitude", "fireRate", "strength"],
@@ -61,6 +118,104 @@ export const WORLD_MODIFIERS = [
     "fastOvercharge",
     "magneticTargets",
     "splitOnDeath"
+]
+export const PROGRESS_MATRIX_NODES = [
+    {
+        id: "transportEfficiency1",
+        branch: "worldResonance",
+        title: "Transport Efficiency I",
+        description: "+10% transport charge gain",
+        cost: 1,
+        prerequisite: null
+    },
+    {
+        id: "gateCalibration1",
+        branch: "worldResonance",
+        title: "Gate Calibration I",
+        description: "-10% world gate cost",
+        cost: 1,
+        prerequisite: "transportEfficiency1"
+    },
+    {
+        id: "modifierInsight",
+        branch: "worldResonance",
+        title: "Modifier Insight",
+        description: "Preview more world and boss information",
+        cost: 2,
+        prerequisite: "gateCalibration1"
+    },
+    {
+        id: "transportEfficiency2",
+        branch: "worldResonance",
+        title: "Transport Efficiency II",
+        description: "+15% transport charge gain",
+        cost: 2,
+        prerequisite: "modifierInsight"
+    },
+    {
+        id: "gateCalibration2",
+        branch: "worldResonance",
+        title: "Gate Calibration II",
+        description: "-15% world gate cost",
+        cost: 3,
+        prerequisite: "transportEfficiency2"
+    },
+    {
+        id: "resonanceBuffer",
+        branch: "worldResonance",
+        title: "Resonance Buffer",
+        description: "Lose less transport charge on boss failure",
+        cost: 3,
+        prerequisite: "gateCalibration2"
+    },
+    {
+        id: "coreBreaker",
+        branch: "bossMastery",
+        title: "Core Breaker",
+        description: "+10% boss weapon damage",
+        cost: 1,
+        prerequisite: null
+    },
+    {
+        id: "adaptiveCoolant",
+        branch: "bossMastery",
+        title: "Adaptive Coolant",
+        description: "Slightly faster boss weapon cooldown",
+        cost: 1,
+        prerequisite: "coreBreaker"
+    },
+    {
+        id: "emergencyPlating",
+        branch: "bossMastery",
+        title: "Emergency Plating",
+        description: "+1 max hit during boss fights",
+        cost: 2,
+        prerequisite: "adaptiveCoolant"
+    },
+    {
+        id: "phaseAnalysis",
+        branch: "bossMastery",
+        title: "Phase Analysis",
+        description: "Better boss phase upgrade consistency",
+        cost: 2,
+        prerequisite: "emergencyPlating"
+    },
+    {
+        id: "prepLogistics",
+        branch: "bossMastery",
+        title: "Prep Logistics",
+        description: "-10% boss prep item costs",
+        cost: 3,
+        prerequisite: "phaseAnalysis"
+    },
+    {
+        id: "salvageProtocol",
+        branch: "bossMastery",
+        title: "Salvage Protocol",
+        description: "Boss wins grant more core fragments",
+        cost: 3,
+        prerequisite: "prepLogistics"
+    }
 ]
 export const RARE_TARGET_TYPES = [
     "golden",
