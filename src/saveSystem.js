@@ -51,6 +51,7 @@ export class SaveSystem {
                 scatterLevel: this.game.scatterMasteryLevel ?? 0,
                 heavyLevel: this.game.heavyMasteryLevel ?? 0
             },
+            discoveredTargets: [...this.game.discoveredTargets],
             upgrades: {
                 frequencyLevel: activeStats.frequencyLevel ?? 0,
                 amplitudeLevel: activeStats.amplitudeLevel ?? 0,
@@ -101,6 +102,9 @@ export class SaveSystem {
             this.game.pulseMasteryLevel = this.readNumber(saveData.mastery?.pulseLevel, 0)
             this.game.scatterMasteryLevel = this.readNumber(saveData.mastery?.scatterLevel, 0)
             this.game.heavyMasteryLevel = this.readNumber(saveData.mastery?.heavyLevel, 0)
+            this.game.discoveredTargets = new Set(
+                Array.isArray(saveData.discoveredTargets) ? saveData.discoveredTargets : []
+            )
 
             this.game.targetUpgradeSystem.valueLevel = this.readNumber(saveData.targetUpgrades?.valueLevel, 0)
             this.game.targetUpgradeSystem.spawnRateLevel = this.readNumber(saveData.targetUpgrades?.spawnRateLevel, 0)
@@ -214,6 +218,7 @@ export class SaveSystem {
             this.game.pulseMasteryLevel = 0
             this.game.scatterMasteryLevel = 0
             this.game.heavyMasteryLevel = 0
+            this.game.discoveredTargets = new Set()
 
             this.game.laserOvercharge = 0
             this.game.laserTypeStats = this.game.createLaserTypeStats()

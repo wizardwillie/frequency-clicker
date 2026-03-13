@@ -1661,7 +1661,10 @@ export class Game {
             { id: "phase", label: "Phase" },
             { id: "charger", label: "Charger" },
             { id: "fragment", label: "Fragment" },
-            { id: "boss", label: "Boss" }
+            { id: "boss", label: "Boss" },
+            { id: "golden", label: "Golden" },
+            { id: "phantom", label: "Phantom" },
+            { id: "ancient", label: "Ancient" }
         ]
 
     }
@@ -3228,11 +3231,23 @@ export class Game {
                 ctx.lineWidth = 1
                 ctx.stroke()
 
+                const previewSize = 24
+                const previewX = layout.content.x + 8
+                const previewY = rowY + (((rowHeight - 4) - previewSize) / 2)
+                this.drawTargetIndexPreview(
+                    ctx,
+                    entry.id,
+                    previewX,
+                    previewY,
+                    previewSize,
+                    discovered
+                )
+
                 ctx.font = "bold 15px Arial"
                 ctx.fillStyle = discovered ? "#7dd3ff" : "rgba(255,255,255,0.65)"
                 ctx.fillText(
                     discovered ? "✔ " + entry.label : "❓ Unknown",
-                    layout.content.x + 14,
+                    layout.content.x + 42,
                     rowY + ((rowHeight - 4) / 2)
                 )
             }
@@ -3259,6 +3274,158 @@ export class Game {
             this.drawRoundedRectPath(ctx, trackX, thumbY, 6, thumbHeight, 3)
             ctx.fill()
         }
+
+        ctx.restore()
+
+    }
+
+    drawTargetIndexPreview(ctx, targetId, x, y, size, discovered) {
+
+        const centerX = x + (size / 2)
+        const centerY = y + (size / 2)
+        const ringRadius = Math.max(2, size * 0.42)
+        let radius = Math.max(2, size * 0.31)
+        let fillColor = "#52e3ff"
+        let strokeColor = "rgba(160,235,255,0.9)"
+        let lineWidth = 2
+        let ringColor = null
+        let alpha = 1
+
+        ctx.save()
+
+        this.drawRoundedRectPath(ctx, x, y, size, size, 6)
+        ctx.fillStyle = discovered ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.025)"
+        ctx.fill()
+        ctx.strokeStyle = discovered ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.1)"
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        if (!discovered) {
+            ctx.fillStyle = "rgba(165,175,205,0.4)"
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, size * 0.28, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.strokeStyle = "rgba(210,220,245,0.38)"
+            ctx.lineWidth = 1.5
+            ctx.stroke()
+            ctx.textAlign = "center"
+            ctx.textBaseline = "middle"
+            ctx.font = "bold 11px Arial"
+            ctx.fillStyle = "rgba(255,255,255,0.8)"
+            ctx.fillText("?", centerX, centerY + 0.5)
+            ctx.restore()
+            return
+        }
+
+        switch (targetId) {
+            case "basic":
+                fillColor = "#53e6ff"
+                strokeColor = "rgba(190,245,255,0.9)"
+                break
+            case "highValue":
+                fillColor = "#ffd54a"
+                strokeColor = "#ffe79b"
+                break
+            case "armored":
+                fillColor = "#2fd86d"
+                strokeColor = "#a8ffd0"
+                lineWidth = 2.5
+                break
+            case "reinforced":
+                fillColor = "#c04dff"
+                strokeColor = "#e0a2ff"
+                lineWidth = 2.5
+                break
+            case "heavy":
+                fillColor = "#8e1f1f"
+                strokeColor = "#2a0a0a"
+                lineWidth = 3
+                radius = size * 0.34
+                break
+            case "shielded":
+                fillColor = "#3a86ff"
+                strokeColor = "#9cc6ff"
+                ringColor = "rgba(120,195,255,0.9)"
+                break
+            case "reflector":
+                fillColor = "#ffffff"
+                strokeColor = "#d7ecff"
+                ringColor = "#77e7ff"
+                break
+            case "splitter":
+                fillColor = "#ff9a3c"
+                strokeColor = "#ffd39d"
+                break
+            case "swarm":
+                fillColor = "#ff8d2f"
+                strokeColor = "#ffc78f"
+                radius = size * 0.2
+                break
+            case "phase":
+                fillColor = "#9b5cff"
+                strokeColor = "#ccb0ff"
+                alpha = 0.42
+                break
+            case "charger":
+                fillColor = "#ff6d3b"
+                strokeColor = "#ffc48e"
+                break
+            case "fragment":
+                fillColor = "#d6e2ff"
+                strokeColor = "#eff4ff"
+                radius = size * 0.2
+                break
+            case "boss":
+                fillColor = "#9f1f2f"
+                strokeColor = "#1f0507"
+                lineWidth = 3
+                radius = size * 0.36
+                break
+            case "golden":
+                fillColor = "#ffd700"
+                strokeColor = "#fff3a3"
+                break
+            case "phantom":
+                fillColor = "#9b5cff"
+                strokeColor = "#c8a6ff"
+                alpha = 0.5
+                break
+            case "ancient":
+                fillColor = "#ff4a4a"
+                strokeColor = "#641c1c"
+                lineWidth = 3
+                radius = size * 0.34
+                break
+        }
+
+        ctx.globalAlpha = alpha
+        ctx.shadowColor = fillColor
+        ctx.shadowBlur = 8
+        ctx.beginPath()
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+        ctx.fillStyle = fillColor
+        ctx.fill()
+        ctx.shadowBlur = 0
+
+        if (ringColor) {
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2)
+            ctx.strokeStyle = ringColor
+            ctx.lineWidth = 1.5
+            ctx.stroke()
+        }
+
+        ctx.beginPath()
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+        ctx.strokeStyle = strokeColor
+        ctx.lineWidth = lineWidth
+        ctx.stroke()
+
+        ctx.globalAlpha = 0.5 * alpha
+        ctx.beginPath()
+        ctx.arc(centerX, centerY, radius * 0.4, 0, Math.PI * 2)
+        ctx.fillStyle = "#ffffff"
+        ctx.fill()
 
         ctx.restore()
 
