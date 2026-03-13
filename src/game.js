@@ -1669,10 +1669,36 @@ export class Game {
 
     }
 
+    getTargetDescription(targetId) {
+
+        const descriptions = {
+            basic: "Standard target with no special behavior.",
+            highValue: "Worth extra Energy Points when destroyed.",
+            fast: "Moves quickly and is harder to hit.",
+            armored: "Has increased durability.",
+            reinforced: "A tougher upgraded target with higher health.",
+            shielded: "Its shield must break before normal damage applies.",
+            heavy: "Slow, durable, and built to absorb punishment.",
+            splitter: "Breaks apart into smaller threats on destruction.",
+            reflector: "Can create reflected laser behavior.",
+            swarm: "Small, fast targets that appear in groups.",
+            phase: "Can partially phase out and avoid damage.",
+            charger: "Builds momentum and bursts forward aggressively.",
+            fragment: "A smaller leftover target created by splitting effects.",
+            boss: "A major high-value threat with extreme durability.",
+            golden: "A rare premium target worth a huge reward.",
+            phantom: "A rare drifting target with unstable movement.",
+            ancient: "A rare elite target with high durability and value."
+        }
+
+        return descriptions[targetId] || "Unknown target profile."
+
+    }
+
     getTargetIndexContentHeight() {
 
         const entries = this.getTargetIndexEntries()
-        const rowHeight = 34
+        const rowHeight = 54
         const topPadding = 8
         const bottomPadding = 8
 
@@ -3197,7 +3223,7 @@ export class Game {
         ctx.textAlign = "left"
         ctx.textBaseline = "middle"
 
-        const rowHeight = 34
+        const rowHeight = 54
         let rowY = layout.content.y + 8 - this.targetIndexScroll
 
         for (const entry of entries) {
@@ -3243,13 +3269,20 @@ export class Game {
                     discovered
                 )
 
-                ctx.font = "bold 15px Arial"
-                ctx.fillStyle = discovered ? "#7dd3ff" : "rgba(255,255,255,0.65)"
-                ctx.fillText(
-                    discovered ? "✔ " + entry.label : "❓ Unknown",
-                    layout.content.x + 42,
-                    rowY + ((rowHeight - 4) / 2)
-                )
+                if (discovered) {
+                    const textX = layout.content.x + 42
+                    ctx.font = "bold 15px Arial"
+                    ctx.fillStyle = "#7dd3ff"
+                    ctx.fillText("✔ " + entry.label, textX, rowY + 16)
+
+                    ctx.font = "12px Arial"
+                    ctx.fillStyle = "rgba(230,240,255,0.72)"
+                    ctx.fillText(this.getTargetDescription(entry.id), textX, rowY + 34)
+                } else {
+                    ctx.font = "bold 15px Arial"
+                    ctx.fillStyle = "rgba(255,255,255,0.65)"
+                    ctx.fillText("❓ Unknown", layout.content.x + 42, rowY + ((rowHeight - 4) / 2))
+                }
             }
 
             rowY += rowHeight
