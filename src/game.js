@@ -73,6 +73,8 @@ export class Game {
         ]
         this.currentMusic = null
         this.isMuted = false
+        this.audioUnlocked = false
+        this.audioContext = null
         this.worldLevel = WORLD_START_LEVEL
         this.transportCharge = 0
         this.transportChargeRequired = TRANSPORT_INITIAL_CHARGE_REQUIRED
@@ -270,8 +272,10 @@ export class Game {
         this.upgradeSystem = new UpgradeSystem(this)
         this.targetUpgradeSystem = new TargetUpgradeSystem(this)
         this.clickUpgradeSystem = new ClickUpgradeSystem(this)
+        this.saveSystemLoaded = false
         this.saveSystem = new SaveSystem(this)
         this.saveSystem.load()
+        this.saveSystemLoaded = true
         this.hasSaveGame = false
         try {
             const save = localStorage.getItem("frequencyClickerSave") || localStorage.getItem("frequencyLaserClickerSave")
@@ -280,6 +284,9 @@ export class Game {
             this.hasSaveGame = false
         }
         this.canvas.addEventListener("click", (event) => {
+            if (!this.audioUnlocked) {
+                this.unlockAudio()
+            }
             this.handleClick(event)
         })
         this.canvas.addEventListener("mousemove", (event) => {
@@ -307,7 +314,6 @@ export class Game {
             }
             this.togglePauseMenu()
         })
-        this.playRandomMusic()
     }
 
     playRandomMusic() {
@@ -329,9 +335,37 @@ export class Game {
             this.playRandomMusic()
         })
 
-        audio.play().catch(() => {})
+        audio.play().catch(() => {
+            setTimeout(() => {
+                if (!this.isMuted && this.audioUnlocked) {
+                    audio.play().catch(() => {})
+                }
+            }, 100)
+        })
 
         this.currentMusic = audio
+    }
+
+    unlockAudio() {
+
+        if (this.audioUnlocked) return
+
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext
+            if (AudioContextClass) {
+                if (!this.audioContext) {
+                    this.audioContext = new AudioContextClass()
+                }
+                if (this.audioContext.state === "suspended") {
+                    this.audioContext.resume().catch(() => {})
+                }
+            }
+        } catch {
+            // no-op
+        }
+
+        this.audioUnlocked = true
+
     }
 
     configurePointAccessors() {
@@ -1142,6 +1176,16 @@ export class Game {
             this.gameState = GAME_STATE_PLAYING
             this.showInfoScreen = false
             this.showTargetIndex = false
+            if (!this.audioUnlocked) {
+                this.unlockAudio()
+            }
+            if (this.currentMusic) {
+                try {
+                    this.currentMusic.pause()
+                } catch {}
+                this.currentMusic = null
+            }
+            this.playRandomMusic()
             return
         }
 
@@ -2174,6 +2218,14 @@ export class Game {
             return
         }
 
+        if (
+            this.gameState === GAME_STATE_PLAYING &&
+            !this.isMuted &&
+            !this.currentMusic
+        ) {
+            this.playRandomMusic()
+        }
+
         if (this.showTargetIndex) {
             return
         }
@@ -2251,6 +2303,10 @@ export class Game {
             text.update(delta)
         }
         this.floatingTexts = this.floatingTexts.filter(t => t.life > 0)
+
+        if (!this.saveSystemLoaded) {
+            return
+        }
 
         this.autoSaveTimer += delta
 

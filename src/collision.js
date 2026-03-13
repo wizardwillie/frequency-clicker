@@ -443,7 +443,8 @@ export class CollisionSystem {
         for (let laser of lasers) {
 
             if (!laser.active) continue
-            const maxReach = laser.amplitude + this.hitThreshold
+            const overchargeMultiplier = 1 + (this.game.laserOvercharge * 0.02)
+            const collisionAmplitude = laser.amplitude * overchargeMultiplier
 
             for (let i = targets.length - 1; i >= 0; i--) {
 
@@ -452,13 +453,14 @@ export class CollisionSystem {
                 const laserStartX = laser.startGridX ?? 0
 
                 if (targetGridX < laserStartX || targetGridX > laser.x) continue
-                if (target.y < centerY - maxReach || target.y > centerY + maxReach) continue
+                const targetRadius = target.radius ?? 0
+                if (target.y + targetRadius < 0 || target.y - targetRadius > this.game.canvas.height) continue
 
                 const waveX = Math.floor(targetGridX / 5) * 5
 
                 const waveY =
                 centerY +
-                Math.sin((waveX * laser.frequency) + laser.phase) * laser.amplitude
+                Math.sin((waveX * laser.frequency) + laser.phase) * collisionAmplitude
 
                 const distance = Math.abs(target.y - waveY)
 

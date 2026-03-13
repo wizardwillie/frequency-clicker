@@ -46,6 +46,11 @@ export class SaveSystem {
                 damage: this.game.clickDamage,
                 upgradeLevel: this.game.clickUpgradeLevel
             },
+            mastery: {
+                pulseLevel: this.game.pulseMasteryLevel ?? 0,
+                scatterLevel: this.game.scatterMasteryLevel ?? 0,
+                heavyLevel: this.game.heavyMasteryLevel ?? 0
+            },
             upgrades: {
                 frequencyLevel: activeStats.frequencyLevel ?? 0,
                 amplitudeLevel: activeStats.amplitudeLevel ?? 0,
@@ -93,6 +98,9 @@ export class SaveSystem {
                 saveData.click?.damage,
                 1 + (this.game.clickUpgradeLevel * CLICK_UPGRADE_STEP)
             )
+            this.game.pulseMasteryLevel = this.readNumber(saveData.mastery?.pulseLevel, 0)
+            this.game.scatterMasteryLevel = this.readNumber(saveData.mastery?.scatterLevel, 0)
+            this.game.heavyMasteryLevel = this.readNumber(saveData.mastery?.heavyLevel, 0)
 
             this.game.targetUpgradeSystem.valueLevel = this.readNumber(saveData.targetUpgrades?.valueLevel, 0)
             this.game.targetUpgradeSystem.spawnRateLevel = this.readNumber(saveData.targetUpgrades?.spawnRateLevel, 0)
@@ -155,6 +163,9 @@ export class SaveSystem {
             this.game.fireInterval = 1 / this.game.laserFireRate
             this.game.lastAutoShotTime = -Infinity
             this.game.lastManualShotTime = -Infinity
+            if (this.game.upgradeSystem && typeof this.game.upgradeSystem.refreshMasteryEffects === "function") {
+                this.game.upgradeSystem.refreshMasteryEffects()
+            }
 
             return true
         } catch (error) {
@@ -200,10 +211,16 @@ export class SaveSystem {
             this.game.autoFireEnabled = false
             this.game.lastAutoShotTime = -Infinity
             this.game.lastManualShotTime = -Infinity
+            this.game.pulseMasteryLevel = 0
+            this.game.scatterMasteryLevel = 0
+            this.game.heavyMasteryLevel = 0
 
             this.game.laserOvercharge = 0
             this.game.laserTypeStats = this.game.createLaserTypeStats()
             this.game.fireInterval = 1 / this.game.laserFireRate
+            if (this.game.upgradeSystem && typeof this.game.upgradeSystem.refreshMasteryEffects === "function") {
+                this.game.upgradeSystem.refreshMasteryEffects()
+            }
 
             return true
         } catch (error) {
