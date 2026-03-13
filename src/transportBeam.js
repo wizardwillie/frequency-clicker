@@ -18,11 +18,12 @@ export class TransportBeam {
     getBeamBounds(chargeRatio = this.getChargeRatio()) {
 
         const centerX = this.game.gridX + (this.game.gridWidth / 2)
-        const baseWidth = 86
-        const animationWidthBonus = this.game.transportAnimating ? 14 : 0
-        const width = baseWidth + (chargeRatio * 20) + animationWidthBonus
-        const top = 56
-        const height = this.game.canvas.height - 112
+        const baseWidth = 24
+        const animationWidthBonus = this.game.transportAnimating ? 18 : 0
+        const readyWidthBonus = this.game.transportReady ? 10 : 0
+        const width = baseWidth + (chargeRatio * 82) + animationWidthBonus + readyWidthBonus
+        const top = 0
+        const height = this.game.canvas.height
 
         return {
             x: centerX - (width / 2),
@@ -71,7 +72,7 @@ export class TransportBeam {
 
         const chargeRatio = this.getChargeRatio()
         const intensity = this.game.transportReady ? 1 : chargeRatio
-        const particleRate = 10 + (intensity * 40) + (this.game.transportAnimating ? 35 : 0)
+        const particleRate = 4 + (intensity * 38) + (this.game.transportAnimating ? 35 : 0)
 
         if (particleRate > 0 && (intensity > 0 || this.game.transportAnimating)) {
             this.spawnTimer += delta * particleRate
@@ -108,10 +109,7 @@ export class TransportBeam {
             : 0
         const beam = this.getBeamBounds(chargeRatio)
         const centerX = beam.x + (beam.width / 2)
-        const intensity = Math.min(
-            1,
-            chargeRatio + (this.game.transportReady ? 0.2 : 0) + (animationProgress * 0.8)
-        )
+        const isReady = chargeRatio >= 1 || this.game.transportReady
         const gradient = ctx.createLinearGradient(centerX, beam.y, centerX, beam.y + beam.height)
         gradient.addColorStop(0, "#7df9ff")
         gradient.addColorStop(1, "#b16dff")
@@ -121,44 +119,48 @@ export class TransportBeam {
         ctx.rect(this.game.gridX, 0, this.game.gridWidth, this.game.canvas.height)
         ctx.clip()
 
+        const outerWidth = beam.width * (1.4 + (chargeRatio * 0.7))
+        const midWidth = beam.width * (0.74 + (chargeRatio * 0.22))
+        const coreWidth = beam.width * (0.24 + (chargeRatio * 0.16))
+
         // Wide bloom
         ctx.globalCompositeOperation = "lighter"
-        ctx.globalAlpha = 0.1 + (intensity * 0.24)
+        ctx.globalAlpha = 0.03 + (chargeRatio * 0.17) + (animationProgress * 0.12)
         ctx.fillStyle = gradient
         ctx.fillRect(
-            centerX - (beam.width * 0.95),
+            centerX - (outerWidth / 2),
             beam.y,
-            beam.width * 1.9,
+            outerWidth,
             beam.height
         )
 
         // Mid glow
-        ctx.globalAlpha = 0.2 + (intensity * 0.28)
+        ctx.globalAlpha = 0.08 + (chargeRatio * 0.32) + (animationProgress * 0.1)
         ctx.fillRect(
-            centerX - (beam.width * 0.45),
+            centerX - (midWidth / 2),
             beam.y,
-            beam.width * 0.9,
+            midWidth,
             beam.height
         )
 
         // Core beam
         ctx.globalCompositeOperation = "source-over"
-        ctx.globalAlpha = 0.35 + (intensity * 0.55)
+        ctx.globalAlpha = 0.12 + (chargeRatio * 0.72) + (animationProgress * 0.1)
         ctx.fillRect(
-            centerX - (beam.width * 0.16),
+            centerX - (coreWidth / 2),
             beam.y,
-            beam.width * 0.32,
+            coreWidth,
             beam.height
         )
 
-        if (chargeRatio >= 1 || this.game.transportReady) {
+        if (isReady) {
             ctx.globalCompositeOperation = "lighter"
             ctx.globalAlpha = 0.5 + (animationProgress * 0.3)
             ctx.fillStyle = "#ffffff"
             ctx.fillRect(
-                centerX - (beam.width * 0.08),
+                centerX - (coreWidth * 0.22),
                 beam.y,
-                beam.width * 0.16,
+                coreWidth * 0.44,
                 beam.height
             )
         }
@@ -167,10 +169,11 @@ export class TransportBeam {
         ctx.globalCompositeOperation = "lighter"
         for (const particle of this.particles) {
             const lifeRatio = particle.maxLife > 0 ? particle.life / particle.maxLife : 0
-            ctx.globalAlpha = Math.max(0, lifeRatio) * 0.85
+            const particleIntensity = (0.18 + (chargeRatio * 0.82) + (isReady ? 0.12 : 0))
+            ctx.globalAlpha = Math.max(0, lifeRatio) * particleIntensity
             ctx.fillStyle = particle.color
             ctx.beginPath()
-            ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2)
+            ctx.arc(particle.x, particle.y, particle.size * (0.85 + (chargeRatio * 0.35)), 0, Math.PI * 2)
             ctx.fill()
         }
 
