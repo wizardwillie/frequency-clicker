@@ -4027,9 +4027,10 @@ export class Game {
         ctx.strokeStyle = "rgba(255,255,255,0.05)"
         ctx.stroke()
 
-        const iconSize = 48
-        const iconX = x + 12
-        const iconY = y + ((height - iconSize) / 2)
+        const padding = 6
+        const iconSize = height - (padding * 2)
+        const iconX = x + padding
+        const iconY = y + padding
         let iconContainerFill = "rgba(255,255,255,0.03)"
         let iconContainerShadowColor = "transparent"
         let iconContainerShadowBlur = 0
