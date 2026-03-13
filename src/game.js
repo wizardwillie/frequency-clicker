@@ -2534,13 +2534,19 @@ export class Game {
         }
         this.ctx.restore()
 
+        this.ctx.save()
+        this.ctx.beginPath()
+        this.ctx.rect(this.gridX, 0, this.gridWidth, this.canvas.height)
+        this.ctx.clip()
+
         this.drawLaserEmitter(this.ctx)
         for (let laser of this.lasers) {
             laser.draw(this.ctx)
-        }   
+        }
         this.drawPulseShockwaves(this.ctx)
-
         this.particleSystem.draw(this.ctx)
+
+        this.ctx.restore()
 
         for (let text of this.floatingTexts) {
             text.draw(this.ctx)
