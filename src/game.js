@@ -152,6 +152,18 @@ export class Game {
         this.panelWidth = 320
         this.gridX = this.panelWidth
         this.gridWidth = this.canvas.width - this.panelWidth
+        this.pauseButton = {
+            x: this.canvas.width - 120,
+            y: 18,
+            width: 92,
+            height: 40
+        }
+        this.muteButton = {
+            x: this.pauseButton.x - 52,
+            y: 18,
+            width: 40,
+            height: 40
+        }
         this.gridOffset = 0
         this.emitterRecoil = 0
         this.panelScroll = 0
@@ -810,6 +822,26 @@ export class Game {
             return
         }
 
+        if (this.isHoveringMuteButton(mouseX, mouseY)) {
+            this.isMuted = !this.isMuted
+
+            if (this.isMuted) {
+                if (this.currentMusic) this.currentMusic.pause()
+            } else {
+                if (this.currentMusic) {
+                    this.currentMusic.play().catch(() => {})
+                } else {
+                    this.playRandomMusic()
+                }
+            }
+            return
+        }
+
+        if (this.isHoveringPauseButton(mouseX, mouseY)) {
+            this.togglePauseMenu()
+            return
+        }
+
         if (mouseX < this.panelWidth) {
             this.handlePanelClick(mouseX, mouseY + this.panelScroll)
             return
@@ -999,6 +1031,28 @@ export class Game {
 
     }
 
+    isHoveringPauseButton(mouseX, mouseY) {
+
+        if (this.gameState !== GAME_STATE_PLAYING) return false
+        if (this.showPauseMenu) return false
+        if (this.showInfoScreen) return false
+        if (this.showTargetIndex) return false
+
+        return this.isInsideButton(mouseX, mouseY, this.pauseButton)
+
+    }
+
+    isHoveringMuteButton(mouseX, mouseY) {
+
+        if (this.gameState !== GAME_STATE_PLAYING) return false
+        if (this.showPauseMenu) return false
+        if (this.showInfoScreen) return false
+        if (this.showTargetIndex) return false
+
+        return this.isInsideButton(mouseX, mouseY, this.muteButton)
+
+    }
+
     handleMouseMove(event) {
 
         const rect = this.canvas.getBoundingClientRect()
@@ -1055,6 +1109,16 @@ export class Game {
         if (this.showPauseMenu) {
             const hoveringPauseButton = this.isHoveringPauseMenuButton(this.mouseX, this.mouseY)
             this.canvas.style.cursor = hoveringPauseButton ? "pointer" : "default"
+            return
+        }
+
+        if (this.isHoveringMuteButton(this.mouseX, this.mouseY)) {
+            this.canvas.style.cursor = "pointer"
+            return
+        }
+
+        if (this.isHoveringPauseButton(this.mouseX, this.mouseY)) {
+            this.canvas.style.cursor = "pointer"
             return
         }
 
@@ -2482,6 +2546,9 @@ export class Game {
             text.draw(this.ctx)
         }
 
+        this.drawMuteButton(this.ctx)
+        this.drawPauseButton(this.ctx)
+
         if (this.showPauseMenu) {
             this.drawPauseMenu(this.ctx)
         }
@@ -2762,6 +2829,72 @@ export class Game {
         for (const button of buttons) {
             drawTitleCard(button, button.label, button.iconId)
         }
+
+    }
+
+    drawPauseButton(ctx) {
+
+        if (this.gameState !== GAME_STATE_PLAYING) return
+        if (this.showPauseMenu) return
+
+        const button = this.pauseButton
+        const hovered = this.isHoveringPauseButton(this.mouseX, this.mouseY)
+        const gradient = ctx.createLinearGradient(button.x, button.y, button.x, button.y + button.height)
+        gradient.addColorStop(0, hovered ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.09)")
+        gradient.addColorStop(1, hovered ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)")
+
+        ctx.save()
+        this.drawRoundedRectPath(ctx, button.x, button.y, button.width, button.height, 10)
+        ctx.fillStyle = gradient
+        ctx.fill()
+
+        ctx.shadowColor = hovered ? "#9b5cff" : "#3a86ff"
+        ctx.shadowBlur = hovered ? 16 : 12
+        this.drawRoundedRectPath(ctx, button.x, button.y, button.width, button.height, 10)
+        ctx.strokeStyle = hovered ? "rgba(155,92,255,0.85)" : "rgba(58,134,255,0.72)"
+        ctx.lineWidth = 1.4
+        ctx.stroke()
+
+        ctx.shadowBlur = 0
+        ctx.fillStyle = "#eaf3ff"
+        ctx.font = "700 14px Arial"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText("PAUSE", button.x + (button.width / 2), button.y + (button.height / 2))
+        ctx.restore()
+
+    }
+
+    drawMuteButton(ctx) {
+
+        if (this.gameState !== GAME_STATE_PLAYING) return
+        if (this.showPauseMenu) return
+
+        const button = this.muteButton
+        const hovered = this.isHoveringMuteButton(this.mouseX, this.mouseY)
+        const gradient = ctx.createLinearGradient(button.x, button.y, button.x, button.y + button.height)
+        gradient.addColorStop(0, hovered ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.09)")
+        gradient.addColorStop(1, hovered ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)")
+
+        ctx.save()
+        this.drawRoundedRectPath(ctx, button.x, button.y, button.width, button.height, 10)
+        ctx.fillStyle = gradient
+        ctx.fill()
+
+        ctx.shadowColor = hovered ? "#9b5cff" : "#3a86ff"
+        ctx.shadowBlur = hovered ? 16 : 12
+        this.drawRoundedRectPath(ctx, button.x, button.y, button.width, button.height, 10)
+        ctx.strokeStyle = hovered ? "rgba(155,92,255,0.85)" : "rgba(58,134,255,0.72)"
+        ctx.lineWidth = 1.4
+        ctx.stroke()
+
+        ctx.shadowBlur = 0
+        ctx.fillStyle = "#eaf3ff"
+        ctx.font = "700 18px Arial"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText(this.isMuted ? "X" : "♪", button.x + (button.width / 2), button.y + (button.height / 2))
+        ctx.restore()
 
     }
 
