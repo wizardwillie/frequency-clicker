@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# frequency-clicker
-Laser Clicker Game
-=======
 # Frequency Laser Clicker
 
 Frequency Laser Clicker is a browser-based incremental/clicker arcade game built with HTML, CSS, JavaScript, and Canvas.
@@ -59,15 +55,18 @@ Open `index.html` directly in a modern browser.
 
 ### Laser Upgrades
 Managed by `UpgradeSystem` (`src/upgrades.js`):
+- Upgrades now advance a shared oscillator layer across the whole laser arsenal.
 - Frequency upgrade
   - Increases frequency
   - Adds small amplitude and width bonuses
-  - Width is clamped by `MAX_LASER_WIDTH`
+  - Helps newly unlocked lasers feel immediately viable
 - Amplitude upgrade
-  - Increases wave vertical range
+  - Increases wave vertical range across all lasers
 - Fire rate upgrade
-  - Increases shots/second
+  - Increases shots/second across all lasers
   - Displayed/purchasable only after auto-fire is unlocked
+- Strength upgrade
+  - Raises base damage across all lasers while preserving laser-specific identities
 
 ### Laser Types (Simple vs Plasma)
 Defined in `src/laserTypes.js`.
@@ -82,7 +81,7 @@ Current tiers:
   - Warm palette
   - Stronger glow/flash multipliers
 
-Each type has its own mutable stat container in `game.laserTypeStats`.
+Each type keeps its own derived stat container in `game.laserTypeStats`, but core oscillator progression is now shared across lasers while mastery stays weapon-specific.
 
 ### Manual Firing
 - Triggered by grid click when not clicking a target.
@@ -162,7 +161,7 @@ The panel is grouped into sections:
 
 Major modules in `src/`:
 - `main.js`: bootstrap and startup
-- `game.js`: game loop, global state, input routing, panel rendering
+- `game.js`: game loop, runtime orchestration, panel rendering
 - `spawn.js`: target timing/probability generation, spawn cap
 - `collision.js`: laser-target intersection and payouts
 - `upgrades.js`: laser upgrade logic
@@ -172,7 +171,8 @@ Major modules in `src/`:
 - `floatingText.js`: transient reward text entity
 - `laserTypes.js`: laser type definitions and visual multipliers
 - `constants.js`: gameplay and balance constants
-- `economy.js`: placeholder (unused)
+- `economy.js`: explicit point spending/reward API and point bindings
+- `overlayController.js`: overlay state, click routing, wheel routing, cursor routing
 - `ui.js`: placeholder (unused)
 
 For deeper docs:
@@ -180,4 +180,3 @@ For deeper docs:
 - `GAMEPLAY.md`
 - `DEVELOPMENT.md`
 - `AGENTS.md`
->>>>>>> cc0a0ec (Align panel headers with buttons)

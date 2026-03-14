@@ -245,11 +245,97 @@ export class CollisionSystem {
 
     }
 
+    breakTargetShield(target, options = {}) {
+
+        if (!target || !target.hasShield) {
+            return false
+        }
+
+        target.hasShield = false
+        target.hitFlashTime = target.hitFlashDuration
+
+        if (options.showFloatingText !== false) {
+            this.game.floatingTexts.push(
+                new FloatingText(
+                    target.x + (Math.random() - 0.5) * 12,
+                    target.y + (Math.random() - 0.5) * 12,
+                    "Shield!",
+                    options.color || "#9cd1ff"
+                )
+            )
+        }
+
+        return true
+
+    }
+
+    applyDamageToTarget(targets, targetOrIndex, damage, sourceLaser = null, options = {}) {
+
+        if (!Array.isArray(targets)) {
+            return { target: null, dealt: 0, destroyed: false, shieldBroken: false }
+        }
+
+        const targetIndex = Number.isInteger(targetOrIndex)
+            ? targetOrIndex
+            : targets.indexOf(targetOrIndex)
+
+        if (targetIndex < 0 || targetIndex >= targets.length) {
+            return { target: null, dealt: 0, destroyed: false, shieldBroken: false }
+        }
+
+        const target = targets[targetIndex]
+        const numericDamage = Number.isFinite(damage) ? damage : 0
+
+        if (!target || numericDamage <= 0 || target.health <= 0) {
+            return { target, dealt: 0, destroyed: false, shieldBroken: false }
+        }
+
+        if (options.respectShield !== false && target.hasShield) {
+            return {
+                target,
+                dealt: 0,
+                destroyed: false,
+                shieldBroken: this.breakTargetShield(target, options.shieldOptions)
+            }
+        }
+
+        target.hitFlashTime = target.hitFlashDuration
+        const previousHealth = target.health
+        target.health -= numericDamage
+        const dealt = Math.max(0, previousHealth - Math.max(0, target.health))
+
+        if (dealt > 0 && options.recordDamage !== false) {
+            this.game.recordDamageDealt(dealt)
+        }
+
+        if (dealt > 0 && options.spawnHitParticles !== false) {
+            const hitParticleCount = options.hitParticleCount ?? 3
+            if (hitParticleCount > 0) {
+                this.spawnExplosionParticles(
+                    target.x,
+                    target.y,
+                    hitParticleCount,
+                    options.hitParticleColor || "#ffb84d"
+                )
+            }
+        }
+
+        if (target.health > 0) {
+            return { target, dealt, destroyed: false, shieldBroken: false }
+        }
+
+        this.destroyTarget(targets, targetIndex, sourceLaser, options.destroyOptions)
+        return { target, dealt, destroyed: true, shieldBroken: false }
+
+    }
+
     destroyTarget(targets, targetIndex, sourceLaser, options = {}) {
 
         const target = targets[targetIndex]
 
         if (!target) return
+
+        this.game.runKills += 1
 
         if (typeof this.game.registerTargetDiscovery === "function") {
             this.game.registerTargetDiscovery(target.type)
@@ -270,7 +356,12 @@ export class CollisionSystem {
             : TRANSPORT_CHARGE_PER_KILL
         this.game.addTransportCharge(transportChargeGain)
 
-        this.game.points += target.value
+        const rewardedPoints = this.game.economy
+            ? this.game.economy.award(target.value)
+            : (() => {
+                this.game.points = (this.game.points || 0) + target.value
+                return target.value
+            })()
         const overchargeGain = target.type === "boss" ? 10 : 2
         this.game.laserOvercharge = Math.min(
             this.game.maxLaserOvercharge,
@@ -281,7 +372,7 @@ export class CollisionSystem {
             new FloatingText(
                 target.x + (Math.random() - 0.5) * 12,
                 target.y + (Math.random() - 0.5) * 12,
-                "+" + target.value,
+                "+" + rewardedPoints,
                 this.getRewardColor(target.type)
             )
         )
@@ -349,17 +440,11 @@ export class CollisionSystem {
         sourceLaser.chainCount += 1
         this.markLaserTargetHit(sourceLaser, closestTarget)
 
-        closestTarget.hitFlashTime = closestTarget.hitFlashDuration
         const chainDamage = Math.max(1, sourceLaser.strength || 1)
-        closestTarget.health -= chainDamage
-        this.spawnExplosionParticles(closestTarget.x, closestTarget.y, 4, "#8be8ff")
-
-        if (closestTarget.health <= 0) {
-            const chainedTargetIndex = targets.indexOf(closestTarget)
-            if (chainedTargetIndex !== -1) {
-                this.destroyTarget(targets, chainedTargetIndex, sourceLaser)
-            }
-        }
+        this.applyDamageToTarget(targets, closestTarget, chainDamage, sourceLaser, {
+            hitParticleCount: 4,
+            hitParticleColor: "#8be8ff"
+        })
 
     }
 
@@ -380,13 +465,11 @@ export class CollisionSystem {
 
             if ((dx * dx) + (dy * dy) > radiusSquared) continue
 
-            target.hitFlashTime = target.hitFlashDuration
-            target.health -= shockwaveDamage
-            this.spawnExplosionParticles(target.x, target.y, 2, "#8be8ff")
-
-            if (target.health <= 0) {
-                this.destroyTarget(targets, i, sourceLaser, { allowPulseShockwave: false })
-            }
+            this.applyDamageToTarget(targets, i, shockwaveDamage, sourceLaser, {
+                hitParticleCount: 2,
+                hitParticleColor: "#8be8ff",
+                destroyOptions: { allowPulseShockwave: false }
+            })
         }
 
     }
@@ -485,33 +568,16 @@ export class CollisionSystem {
                         }
                     }
 
-                    if (target.hasShield) {
-                        target.hasShield = false
-                        target.hitFlashTime = target.hitFlashDuration
-                        this.game.floatingTexts.push(
-                            new FloatingText(
-                                target.x + (Math.random() - 0.5) * 12,
-                                target.y + (Math.random() - 0.5) * 12,
-                                "Shield!",
-                                "#9cd1ff"
-                            )
-                        )
-                        continue
-                    }
-
                     const overchargeBonus = 1 + (this.game.laserOvercharge * 0.015)
                     const damage = Math.max(1, (laser.strength || 1) * overchargeBonus)
-                    target.hitFlashTime = target.hitFlashDuration
-                    target.health -= damage
-                    this.consumeHeavyPierce(laser, target)
-                    this.spawnExplosionParticles(target.x, target.y, 3, "#ffb84d")
+                    const damageResult = this.applyDamageToTarget(targets, i, damage, laser, {
+                        hitParticleCount: 3,
+                        hitParticleColor: "#ffb84d"
+                    })
 
-                    if (target.health > 0) {
-                        if (!laser.active) break
-                        continue
+                    if (damageResult.dealt > 0) {
+                        this.consumeHeavyPierce(laser, target)
                     }
-
-                    this.destroyTarget(targets, i, laser)
 
                     if (!laser.active) break
 

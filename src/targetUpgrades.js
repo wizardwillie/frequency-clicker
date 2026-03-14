@@ -76,9 +76,8 @@ export class TargetUpgradeSystem {
 
         const cost = this.getValueCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
         this.valueLevel += 1
 
         return true
@@ -89,9 +88,8 @@ export class TargetUpgradeSystem {
 
         const cost = this.getSpawnRateCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
         this.spawnRateLevel += 1
 
         return true
@@ -102,9 +100,8 @@ export class TargetUpgradeSystem {
 
         const cost = this.getDiversityCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
         this.diversityLevel += 1
 
         return true

@@ -536,8 +536,10 @@ export class Target {
     triggerExploderBurst() {
 
         if (!this.game || !Array.isArray(this.game.targets)) return
+        const targets = [...this.game.targets]
+        const collisionSystem = this.game.collisionSystem
 
-        for (const target of this.game.targets) {
+        for (const target of targets) {
             if (!target || target === this || target.health <= 0) continue
 
             const dx = target.x - this.x
@@ -545,9 +547,23 @@ export class Target {
             const distance = Math.sqrt((dx * dx) + (dy * dy))
             if (distance > this.exploderBurstRadius) continue
 
-            target.health = Math.max(0, target.health - this.exploderBurstDamage)
-            if (target.hitFlashDuration) {
-                target.hitFlashTime = target.hitFlashDuration
+            if (collisionSystem && typeof collisionSystem.applyDamageToTarget === "function") {
+                collisionSystem.applyDamageToTarget(
+                    this.game.targets,
+                    target,
+                    this.exploderBurstDamage,
+                    null,
+                    {
+                        hitParticleCount: 2,
+                        hitParticleColor: "#ff9a66",
+                        destroyOptions: { allowPulseShockwave: false }
+                    }
+                )
+            } else {
+                target.health = Math.max(0, target.health - this.exploderBurstDamage)
+                if (target.hitFlashDuration) {
+                    target.hitFlashTime = target.hitFlashDuration
+                }
             }
         }
 

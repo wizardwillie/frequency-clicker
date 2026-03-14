@@ -7,13 +7,6 @@ import {
     PULSE_MASTERY_UPGRADE_BASE,
     SCATTER_MASTERY_UPGRADE_BASE,
     HEAVY_MASTERY_UPGRADE_BASE,
-    FREQUENCY_UPGRADE_STEP,
-    FREQUENCY_UPGRADE_AMPLITUDE_BONUS,
-    FREQUENCY_UPGRADE_WIDTH_BONUS,
-    MAX_LASER_WIDTH,
-    AMPLITUDE_UPGRADE_STEP,
-    FIRERATE_UPGRADE_STEP,
-    LASER_STRENGTH_UPGRADE_STEP,
     MAX_LASER_STRENGTH,
     SCATTER_BASE_BEAM_COUNT,
     SCATTER_MASTERY_BEAM_STEP,
@@ -22,6 +15,7 @@ import {
     PULSE_SHOCKWAVE_BASE_RADIUS,
     PULSE_MASTERY_RADIUS_STEP
 } from "./constants.js"
+import { LASER_TYPES } from "./laserTypes.js"
 
 export class UpgradeSystem {
 
@@ -39,33 +33,33 @@ export class UpgradeSystem {
 
     getFrequencyCost() {
 
-        const stats = this.getActiveLaserStats()
+        const levels = this.getSharedOscillatorLevels()
 
-        return this.getScaledCost(FREQUENCY_UPGRADE_BASE, stats.frequencyLevel ?? 0)
+        return this.getScaledCost(FREQUENCY_UPGRADE_BASE, levels.frequencyLevel ?? 0)
 
     }
 
     getAmplitudeCost() {
 
-        const stats = this.getActiveLaserStats()
+        const levels = this.getSharedOscillatorLevels()
 
-        return this.getScaledCost(AMPLITUDE_UPGRADE_BASE, stats.amplitudeLevel ?? 0)
+        return this.getScaledCost(AMPLITUDE_UPGRADE_BASE, levels.amplitudeLevel ?? 0)
 
     }
 
     getFireRateCost() {
 
-        const stats = this.getActiveLaserStats()
+        const levels = this.getSharedOscillatorLevels()
 
-        return this.getScaledCost(FIRERATE_UPGRADE_BASE, stats.fireRateLevel ?? 0)
+        return this.getScaledCost(FIRERATE_UPGRADE_BASE, levels.fireRateLevel ?? 0)
 
     }
 
     getStrengthCost() {
 
-        const stats = this.getActiveLaserStats()
+        const levels = this.getSharedOscillatorLevels()
 
-        return this.getScaledCost(LASER_STRENGTH_UPGRADE_BASE, stats.strengthLevel ?? 0)
+        return this.getScaledCost(LASER_STRENGTH_UPGRADE_BASE, levels.strengthLevel ?? 0)
 
     }
 
@@ -121,16 +115,27 @@ export class UpgradeSystem {
 
     }
 
-    getActiveLaserStats() {
+    getSharedOscillatorLevels() {
 
-        const stats = this.game.laserTypeStats[this.game.currentLaserType]
+        const levels = this.game.getSharedOscillatorLevels()
 
-        if (!Number.isFinite(stats.frequencyLevel)) stats.frequencyLevel = 0
-        if (!Number.isFinite(stats.amplitudeLevel)) stats.amplitudeLevel = 0
-        if (!Number.isFinite(stats.fireRateLevel)) stats.fireRateLevel = 0
-        if (!Number.isFinite(stats.strengthLevel)) stats.strengthLevel = 0
+        if (!Number.isFinite(levels.frequencyLevel)) levels.frequencyLevel = 0
+        if (!Number.isFinite(levels.amplitudeLevel)) levels.amplitudeLevel = 0
+        if (!Number.isFinite(levels.fireRateLevel)) levels.fireRateLevel = 0
+        if (!Number.isFinite(levels.strengthLevel)) levels.strengthLevel = 0
 
-        return stats
+        return levels
+
+    }
+
+    getMaxSharedStrengthLevel() {
+
+        const minimumBaseStrength = Object.values(LASER_TYPES).reduce((lowestValue, laserType) => {
+            const baseStrength = laserType.baseStrength ?? laserType.strength ?? 1
+            return Math.min(lowestValue, baseStrength)
+        }, Infinity)
+
+        return Math.max(0, Math.ceil(MAX_LASER_STRENGTH - minimumBaseStrength))
 
     }
 
@@ -138,17 +143,11 @@ export class UpgradeSystem {
 
         const cost = this.getFrequencyCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        const stats = this.getActiveLaserStats()
-
-        this.game.points -= cost
-        stats.frequencyLevel += 1
-
-        stats.frequency += FREQUENCY_UPGRADE_STEP
-        stats.amplitude += FREQUENCY_UPGRADE_AMPLITUDE_BONUS
-        stats.width += FREQUENCY_UPGRADE_WIDTH_BONUS
-        stats.width = Math.min(stats.width, MAX_LASER_WIDTH)
+        const levels = this.getSharedOscillatorLevels()
+        levels.frequencyLevel += 1
+        this.game.recalculateLaserTypeStats()
 
         return true
 
@@ -158,13 +157,11 @@ export class UpgradeSystem {
 
         const cost = this.getAmplitudeCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        const stats = this.getActiveLaserStats()
-
-        this.game.points -= cost
-        stats.amplitudeLevel += 1
-        stats.amplitude += AMPLITUDE_UPGRADE_STEP
+        const levels = this.getSharedOscillatorLevels()
+        levels.amplitudeLevel += 1
+        this.game.recalculateLaserTypeStats()
 
         return true
 
@@ -174,14 +171,11 @@ export class UpgradeSystem {
 
         const cost = this.getFireRateCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        const stats = this.getActiveLaserStats()
-
-        this.game.points -= cost
-        stats.fireRateLevel += 1
-        stats.fireRate += FIRERATE_UPGRADE_STEP
-        this.game.fireInterval = 1 / stats.fireRate
+        const levels = this.getSharedOscillatorLevels()
+        levels.fireRateLevel += 1
+        this.game.recalculateLaserTypeStats()
 
         return true
 
@@ -189,18 +183,15 @@ export class UpgradeSystem {
 
     buyStrength() {
 
-        const stats = this.getActiveLaserStats()
-
-        if (stats.strength >= MAX_LASER_STRENGTH) return false
+        const levels = this.getSharedOscillatorLevels()
+        if (levels.strengthLevel >= this.getMaxSharedStrengthLevel()) return false
 
         const cost = this.getStrengthCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
-        stats.strengthLevel += 1
-        stats.strength += LASER_STRENGTH_UPGRADE_STEP
-        stats.strength = Math.min(stats.strength, MAX_LASER_STRENGTH)
+        levels.strengthLevel += 1
+        this.game.recalculateLaserTypeStats()
 
         return true
 
@@ -226,9 +217,8 @@ export class UpgradeSystem {
 
         const cost = this.getPulseMasteryCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
         this.game.pulseMasteryLevel += 1
         this.refreshMasteryEffects()
 
@@ -242,9 +232,8 @@ export class UpgradeSystem {
 
         const cost = this.getScatterMasteryCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
         this.game.scatterMasteryLevel += 1
         this.refreshMasteryEffects()
 
@@ -258,9 +247,8 @@ export class UpgradeSystem {
 
         const cost = this.getHeavyMasteryCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
         this.game.heavyMasteryLevel += 1
         this.refreshMasteryEffects()
 

@@ -20,15 +20,17 @@ Frequency Laser Clicker uses a modular, file-per-system structure around a singl
 
 - Own global state (`points`, unlock flags, arrays of entities)
 - Maintain playfield geometry (`panelWidth`, `gridX`, `gridWidth`)
-- Route input:
+- Route core gameplay input:
   - panel click handling
   - grid click handling
-  - panel wheel scrolling
 - Coordinate systems:
   - `SpawnSystem`
   - `CollisionSystem`
   - `UpgradeSystem`
   - `TargetUpgradeSystem`
+- Compose support modules:
+  - `EconomySystem`
+  - `OverlayController`
 - Manage laser-type stat containers and active type switching
 
 ### Update Cycle
@@ -52,6 +54,24 @@ Frequency Laser Clicker uses a modular, file-per-system structure around a singl
 6. Draw floating texts
 
 ## Core Systems
+
+## EconomySystem (`src/economy.js`)
+
+Responsibilities:
+- Owns `game.points` bindings
+- Normalizes point values
+- Applies explicit reward scaling through `award()`
+- Applies explicit spending through `spend()`
+- Keeps reward/spend rules out of the `points` setter
+
+## OverlayController (`src/overlayController.js`)
+
+Responsibilities:
+- Owns overlay visibility state for archives/info/target index/progress matrix
+- Centralizes overlay click routing
+- Centralizes overlay wheel routing
+- Centralizes overlay cursor routing
+- Centralizes overlay draw dispatch
 
 ## SpawnSystem (`src/spawn.js`)
 
@@ -79,16 +99,18 @@ Responsibilities:
 - Early-outs by vertical reach before sine math
 - Applies hit threshold test against wave Y
 - Handles multi-hit damage logic
-- Awards points + colored floating text on destroy
+- Resolves target damage/destruction
+- Awards points through `EconomySystem`
+- Spawns colored floating text on destroy
 
 ## UpgradeSystem (`src/upgrades.js`)
 
 Responsibilities:
-- Tracks laser upgrade levels
+- Tracks shared oscillator upgrade levels
 - Computes exponential costs
-- Applies effects to active laser-type stat object
+- Recomputes derived stats for every laser type from shared oscillator progress
 - Recomputes `game.fireInterval` for fire-rate upgrades
-- Clamps laser width
+- Preserves weapon-specific mastery as a separate layer
 
 ## TargetUpgradeSystem (`src/targetUpgrades.js`)
 
@@ -157,6 +179,7 @@ High-level flow:
 2. Systems receive `game` reference in constructors.
 3. `SpawnSystem` creates `Target` instances from constants + target economy multipliers.
 4. `Game` creates `Laser` instances from active laser stats + laser type visuals.
-5. `CollisionSystem` resolves interactions and updates `game.points` / `game.floatingTexts`.
-6. Upgrade systems mutate progression values consumed by spawn and firing systems.
-7. `drawPanel()` renders progression UI in a scrollable clipped region.
+5. `CollisionSystem` resolves interactions and delegates rewards to `EconomySystem`.
+6. `OverlayController` routes non-gameplay overlay input and draw flow.
+7. Upgrade systems mutate progression values consumed by spawn and firing systems.
+8. `drawPanel()` renders progression UI in a scrollable clipped region.

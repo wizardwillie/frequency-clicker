@@ -22,9 +22,8 @@ export class ClickUpgradeSystem {
 
         const cost = this.getClickCost()
 
-        if (this.game.points < cost) return false
+        if (!this.game.economy.spend(cost)) return false
 
-        this.game.points -= cost
         this.game.clickUpgradeLevel += 1
         this.game.clickDamage = 1 + (this.game.clickUpgradeLevel * CLICK_UPGRADE_STEP)
 

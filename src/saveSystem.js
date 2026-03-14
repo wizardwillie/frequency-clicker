@@ -5,7 +5,12 @@ import {
     WORLD_START_LEVEL,
     WORLD_POINT_MULTIPLIER_BASE,
     WORLD_SPAWN_RATE_GROWTH,
-    TRANSPORT_INITIAL_CHARGE_REQUIRED
+    TRANSPORT_INITIAL_CHARGE_REQUIRED,
+    UPGRADE_GROWTH,
+    FREQUENCY_UPGRADE_BASE,
+    AMPLITUDE_UPGRADE_BASE,
+    FIRERATE_UPGRADE_BASE,
+    LASER_STRENGTH_UPGRADE_BASE
 } from "./constants.js"
 import { LASER_TYPES } from "./laserTypes.js"
 
@@ -23,7 +28,14 @@ export class SaveSystem {
 
     save() {
 
-        const activeStats = this.game.laserTypeStats[this.game.currentLaserType]
+        const sharedOscillatorLevels = this.game.getSharedOscillatorSaveData
+            ? this.game.getSharedOscillatorSaveData()
+            : {
+                frequencyLevel: 0,
+                amplitudeLevel: 0,
+                fireRateLevel: 0,
+                strengthLevel: 0
+            }
 
         const saveData = {
             version: SAVE_VERSION,
@@ -54,11 +66,12 @@ export class SaveSystem {
                 heavyLevel: this.game.heavyMasteryLevel ?? 0
             },
             discoveredTargets: [...this.game.discoveredTargets],
+            sharedOscillatorLevels,
             upgrades: {
-                frequencyLevel: activeStats.frequencyLevel ?? 0,
-                amplitudeLevel: activeStats.amplitudeLevel ?? 0,
-                fireRateLevel: activeStats.fireRateLevel ?? 0,
-                strengthLevel: activeStats.strengthLevel ?? 0
+                frequencyLevel: sharedOscillatorLevels.frequencyLevel ?? 0,
+                amplitudeLevel: sharedOscillatorLevels.amplitudeLevel ?? 0,
+                fireRateLevel: sharedOscillatorLevels.fireRateLevel ?? 0,
+                strengthLevel: sharedOscillatorLevels.strengthLevel ?? 0
             },
             targetUpgrades: {
                 valueLevel: this.game.targetUpgradeSystem.valueLevel,
@@ -90,8 +103,8 @@ export class SaveSystem {
             if (!saveData || typeof saveData !== "object") return false
             if (saveData.version !== SAVE_VERSION) return false
 
-            if (typeof this.game.setPointsRaw === "function") {
-                this.game.setPointsRaw(this.readNumber(saveData.points, DEV_STARTING_POINTS))
+            if (this.game.economy && typeof this.game.economy.setRaw === "function") {
+                this.game.economy.setRaw(this.readNumber(saveData.points, DEV_STARTING_POINTS))
             } else {
                 this.game.points = this.readNumber(saveData.points, DEV_STARTING_POINTS)
             }
@@ -174,7 +187,8 @@ export class SaveSystem {
                 strengthLevel: this.readNumber(saveData.upgrades?.strengthLevel, 0)
             }
 
-            this.applyLaserTypeStats(saveData.laserTypeStats, legacyUpgradeLevels)
+            const sharedOscillatorLevels = this.readSharedOscillatorLevels(saveData, legacyUpgradeLevels)
+            this.applyLaserTypeStats(saveData.laserTypeStats, sharedOscillatorLevels)
             this.game.fireInterval = 1 / this.game.laserFireRate
             this.game.lastAutoShotTime = -Infinity
             this.game.lastManualShotTime = -Infinity
@@ -202,8 +216,8 @@ export class SaveSystem {
 
             localStorage.removeItem(this.saveKey)
 
-            if (typeof this.game.setPointsRaw === "function") {
-                this.game.setPointsRaw(DEV_STARTING_POINTS)
+            if (this.game.economy && typeof this.game.economy.setRaw === "function") {
+                this.game.economy.setRaw(DEV_STARTING_POINTS)
             } else {
                 this.game.points = DEV_STARTING_POINTS
             }
@@ -241,8 +255,13 @@ export class SaveSystem {
             this.game.progressMatrixPurchased = preservedProgressMatrix
 
             this.game.laserOvercharge = 0
+            this.game.sharedOscillatorLevels = this.game.createSharedOscillatorLevels()
             this.game.laserTypeStats = this.game.createLaserTypeStats()
-            this.game.fireInterval = 1 / this.game.laserFireRate
+            if (typeof this.game.recalculateLaserTypeStats === "function") {
+                this.game.recalculateLaserTypeStats()
+            } else {
+                this.game.fireInterval = 1 / this.game.laserFireRate
+            }
             if (this.game.upgradeSystem && typeof this.game.upgradeSystem.refreshMasteryEffects === "function") {
                 this.game.upgradeSystem.refreshMasteryEffects()
             }
@@ -280,6 +299,12 @@ export class SaveSystem {
     }
 
     applyLaserTypeStats(savedStats, legacyLevels) {
+
+        if (typeof this.game.setSharedOscillatorLevels === "function") {
+            this.game.setSharedOscillatorLevels(legacyLevels)
+            return
+        }
+
         const savedLaserStats = (savedStats && typeof savedStats === "object")
             ? savedStats
             : {}
@@ -297,6 +322,99 @@ export class SaveSystem {
             baseStats.fireRateLevel = this.readNumber(typeSave?.fireRateLevel, legacyLevels.fireRateLevel)
             baseStats.strengthLevel = this.readNumber(typeSave?.strengthLevel, legacyLevels.strengthLevel)
         }
+
+    }
+
+    readSharedOscillatorLevels(saveData, legacyLevels) {
+
+        const explicitSharedLevels = saveData?.sharedOscillatorLevels
+        if (explicitSharedLevels && typeof explicitSharedLevels === "object") {
+            return {
+                frequencyLevel: this.readNumber(explicitSharedLevels.frequencyLevel, legacyLevels.frequencyLevel),
+                amplitudeLevel: this.readNumber(explicitSharedLevels.amplitudeLevel, legacyLevels.amplitudeLevel),
+                fireRateLevel: this.readNumber(explicitSharedLevels.fireRateLevel, legacyLevels.fireRateLevel),
+                strengthLevel: this.readNumber(explicitSharedLevels.strengthLevel, legacyLevels.strengthLevel)
+            }
+        }
+
+        const savedLaserStats = (saveData?.laserTypeStats && typeof saveData.laserTypeStats === "object")
+            ? saveData.laserTypeStats
+            : {}
+
+        return {
+            frequencyLevel: this.migrateLegacySharedLevel(
+                savedLaserStats,
+                "frequencyLevel",
+                legacyLevels.frequencyLevel,
+                FREQUENCY_UPGRADE_BASE
+            ),
+            amplitudeLevel: this.migrateLegacySharedLevel(
+                savedLaserStats,
+                "amplitudeLevel",
+                legacyLevels.amplitudeLevel,
+                AMPLITUDE_UPGRADE_BASE
+            ),
+            fireRateLevel: this.migrateLegacySharedLevel(
+                savedLaserStats,
+                "fireRateLevel",
+                legacyLevels.fireRateLevel,
+                FIRERATE_UPGRADE_BASE
+            ),
+            strengthLevel: this.migrateLegacySharedLevel(
+                savedLaserStats,
+                "strengthLevel",
+                legacyLevels.strengthLevel,
+                LASER_STRENGTH_UPGRADE_BASE
+            )
+        }
+
+    }
+
+    migrateLegacySharedLevel(savedLaserStats, levelKey, fallbackLevel, baseCost) {
+
+        let totalSpend = 0
+        let foundSavedLevel = false
+
+        for (const stats of Object.values(savedLaserStats)) {
+            const level = stats && Number.isFinite(stats[levelKey]) ? stats[levelKey] : null
+            if (!Number.isFinite(level) || level <= 0) continue
+
+            foundSavedLevel = true
+            totalSpend += this.getTotalSpendForLevel(level, baseCost)
+        }
+
+        if (!foundSavedLevel && Number.isFinite(fallbackLevel) && fallbackLevel > 0) {
+            totalSpend = this.getTotalSpendForLevel(fallbackLevel, baseCost)
+        }
+
+        return this.getEquivalentSharedLevel(totalSpend, baseCost)
+
+    }
+
+    getTotalSpendForLevel(level, baseCost) {
+
+        let totalSpend = 0
+        const normalizedLevel = Math.max(0, Math.floor(Number.isFinite(level) ? level : 0))
+
+        for (let i = 0; i < normalizedLevel; i++) {
+            totalSpend += Math.floor(baseCost * Math.pow(UPGRADE_GROWTH, i))
+        }
+
+        return totalSpend
+
+    }
+
+    getEquivalentSharedLevel(totalSpend, baseCost) {
+
+        let remainingSpend = Math.max(0, Math.floor(Number.isFinite(totalSpend) ? totalSpend : 0))
+        let level = 0
+
+        while (remainingSpend >= Math.floor(baseCost * Math.pow(UPGRADE_GROWTH, level))) {
+            remainingSpend -= Math.floor(baseCost * Math.pow(UPGRADE_GROWTH, level))
+            level += 1
+        }
+
+        return level
 
     }
 

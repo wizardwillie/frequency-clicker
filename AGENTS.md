@@ -19,6 +19,8 @@ Frequency Laser Clicker is a modular browser incremental game with:
 ## File Responsibility Guardrails
 
 - Keep `game.js` from becoming algorithm-heavy.
+- Keep point reward/spend rules in `economy.js`.
+- Keep overlay/menu state and routing in `overlayController.js`.
 - Keep collision math in `collision.js`.
 - Keep spawn rules in `spawn.js`.
 - Keep laser upgrade logic in `upgrades.js`.
@@ -29,6 +31,8 @@ Frequency Laser Clicker is a modular browser incremental game with:
 ## State and Data Ownership
 
 - Global runtime state: `game.js`
+- Explicit point reward/spend API: `economy.js`
+- Overlay visibility/routing state: `overlayController.js`
 - Entities:
   - lasers in `game.lasers`
   - targets in `game.targets`

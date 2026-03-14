@@ -13,7 +13,7 @@
 
 ## src/
 - `main.js`: bootstraps game
-- `game.js`: runtime owner, loop, input routing, panel rendering
+- `game.js`: runtime owner, loop, gameplay routing, panel rendering
 - `spawn.js`: target generation and spawn pacing
 - `collision.js`: laser-target interaction
 - `upgrades.js`: laser upgrades
@@ -23,7 +23,8 @@
 - `floatingText.js`: reward text entity
 - `laserTypes.js`: laser tier definitions
 - `constants.js`: all balance/config constants
-- `economy.js`: placeholder (currently unused)
+- `economy.js`: explicit point reward/spend system
+- `overlayController.js`: overlay/menu state and routing
 - `ui.js`: placeholder (currently unused)
 
 ## Coding Conventions
@@ -34,6 +35,8 @@
 - Keep rendering in draw methods (`drawPanel`, `Laser.draw`, `Target.draw`, etc.).
 - Keep systems modular; avoid growing `game.js` with algorithm-heavy logic.
 - Keep grid and panel coordinate spaces explicit.
+- Do not hide economy rules in property setters; use `EconomySystem.award()` and `EconomySystem.spend()`.
+- Route overlay input through `OverlayController` instead of open-coded booleans in `game.js`.
 
 ## Guidelines for Adding New Systems
 
@@ -50,8 +53,9 @@
    - economy/spawn upgrade -> `targetUpgrades.js`
 2. Add cost/effect constants.
 3. Add buy/getCost methods in the owning system.
-4. Wire button + click behavior in `game.js`.
-5. Verify scaling and affordability feedback.
+4. If it is a core waveform stat, decide whether it belongs in the shared oscillator layer instead of weapon-specific mastery.
+5. Wire button + click behavior in `game.js`.
+6. Verify scaling and affordability feedback.
 
 ## Adding a New Laser Type
 1. Add entry in `laserTypes.js` with base stats/colors/multipliers.

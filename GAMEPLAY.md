@@ -49,7 +49,7 @@ Current tiers:
   - stronger glow/flash intensity
   - warmer color palette
 
-Each tier keeps independent mutable stats in `game.laserTypeStats`.
+Each tier keeps its own derived stat profile in `game.laserTypeStats`, but the core oscillator layer is shared across lasers. Unlocking a new weapon now inherits your waveform development instead of starting nearly from zero.
 
 ## Target Mechanics
 
@@ -93,6 +93,9 @@ Earned by:
 - Frequency
 - Amplitude
 - Fire Rate
+- Strength
+
+These oscillator upgrades are shared across the whole laser arsenal and apply on top of each laser type’s base identity. Mastery remains weapon-specific.
 
 Cost model:
 - `floor(baseCost * UPGRADE_GROWTH^level)`

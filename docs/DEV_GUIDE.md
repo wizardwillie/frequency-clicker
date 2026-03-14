@@ -12,7 +12,8 @@ For active development rules, use:
 - Avoid expanding `src/game.js` with system-specific algorithms.
 - Update docs whenever behavior changes.
 
-## Current Placeholders
+## Current Support Modules
 
-- `src/economy.js` is currently unused.
-- `src/ui.js` is currently unused.
+- `src/economy.js` owns explicit point reward/spend rules.
+- `src/overlayController.js` owns overlay/menu state and routing.
+- `src/ui.js` remains unused.

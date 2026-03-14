@@ -7,6 +7,8 @@ import { TransportBeam } from "./transportBeam.js"
 import { UpgradeSystem } from "./upgrades.js"
 import { TargetUpgradeSystem } from "./targetUpgrades.js"
 import { ClickUpgradeSystem } from "./clickUpgrades.js"
+import { EconomySystem } from "./economy.js"
+import { OverlayController } from "./overlayController.js"
 import { LASER_TYPES } from "./laserTypes.js"
 import { SaveSystem } from "./saveSystem.js"
 import {
@@ -17,6 +19,7 @@ import {
     BASE_MANUAL_FIRE_COOLDOWN,
     DEV_STARTING_POINTS,
     LASER_BASE_STRENGTH,
+    MAX_LASER_WIDTH,
     MAX_LASER_STRENGTH,
     GAME_STATE_TITLE,
     GAME_STATE_PLAYING,
@@ -39,7 +42,13 @@ import {
     PROGRESS_MATRIX_NODES,
     SCATTER_BASE_BEAM_COUNT,
     HEAVY_BASE_PIERCE_COUNT,
-    PULSE_SHOCKWAVE_BASE_RADIUS
+    PULSE_SHOCKWAVE_BASE_RADIUS,
+    FREQUENCY_UPGRADE_STEP,
+    FREQUENCY_UPGRADE_AMPLITUDE_BONUS,
+    FREQUENCY_UPGRADE_WIDTH_BONUS,
+    AMPLITUDE_UPGRADE_STEP,
+    FIRERATE_UPGRADE_STEP,
+    LASER_STRENGTH_UPGRADE_STEP
 } from "./constants.js"
 
 const UPGRADE_ICONS = {
@@ -62,15 +71,10 @@ export class Game {
         this.canvas = canvas
         this.ctx = canvas.getContext("2d")
         this.gameState = GAME_STATE_TITLE
-        this.titleInitialized = false
         this.isPaused = false
         this.showPauseMenu = false
-        this.showInfoScreen = false
-        this.infoScroll = 0
-        this.showTargetIndex = false
-        this.targetIndexScroll = 0
-        this.showProgressMatrix = false
-        this.showArchivesMenu = false
+        this.overlayController = new OverlayController(this)
+        this.overlayController.installBindings()
         this.titleLasers = []
         this.titleTargets = []
         this.titleTimer = 0
@@ -168,17 +172,15 @@ export class Game {
         this.recentDamageDealt = 0
         this.recentDamageWindow = 0
         this._points = 0
-        this.configurePointAccessors()
-        this.setPointsRaw(DEV_STARTING_POINTS)
+        this.economy = new EconomySystem(this)
+        this.economy.installBindings()
+        this.economy.setRaw(DEV_STARTING_POINTS)
         this.clickDamage = 1
         this.clickUpgradeLevel = 0
         this.hasLaser = false
         this.targets = []
         this.lasers = []
         this.floatingTexts = []
-        this.titleLasers = []
-        this.titleTargets = []
-        this.titleTimer = 0
         this._titleLaserSpawnAccumulator = 0
         this._titleTargetSpawnAccumulator = 0
         this.titleHeroLaser = {
@@ -206,8 +208,10 @@ export class Game {
         this.scatterUnlocked = false
         this.heavyUnlocked = false
         this.currentLaserType = "simple"
+        this.sharedOscillatorLevels = this.createSharedOscillatorLevels()
         this.laserTypeStats = this.createLaserTypeStats()
         this.defineLaserStatAccessors()
+        this.recalculateLaserTypeStats()
         this.lastAutoShotTime = -Infinity
         this.lastManualShotTime = -Infinity
         this.fireInterval = 1 / this.laserFireRate
@@ -436,23 +440,10 @@ export class Game {
             }
             if (event.key !== "Escape") return
             if (event.repeat) return
-            if (this.showArchivesMenu) {
-                this.showArchivesMenu = false
+            if (this.overlayController.handleEscape()) {
                 return
             }
             if (this.gameState !== GAME_STATE_PLAYING) return
-            if (this.showTargetIndex) {
-                this.showTargetIndex = false
-                return
-            }
-            if (this.showInfoScreen) {
-                this.showInfoScreen = false
-                return
-            }
-            if (this.showProgressMatrix) {
-                this.showProgressMatrix = false
-                return
-            }
             this.togglePauseMenu()
         })
     }
@@ -511,37 +502,6 @@ export class Game {
         }
 
         this.audioUnlocked = true
-
-    }
-
-    configurePointAccessors() {
-
-        Object.defineProperty(this, "points", {
-            configurable: true,
-            enumerable: true,
-            get: () => this._points,
-            set: (value) => {
-                const numericValue = Number.isFinite(value) ? value : this._points
-
-                if (numericValue > this._points) {
-                    const rawGain = numericValue - this._points
-                    const scaledGain = Math.floor(rawGain * this.worldPointMultiplier)
-                    const normalizedGain = Math.max(0, scaledGain)
-                    this._points += normalizedGain
-                    this.runPointsEarned += normalizedGain
-                    return
-                }
-
-                this._points = Math.max(0, numericValue)
-            }
-        })
-
-    }
-
-    setPointsRaw(value) {
-
-        const numericValue = Number.isFinite(value) ? value : 0
-        this._points = Math.max(0, Math.floor(numericValue))
 
     }
 
@@ -616,6 +576,102 @@ export class Game {
         }
 
         return stats
+
+    }
+
+    createSharedOscillatorLevels(source = {}) {
+
+        const normalizeLevel = (value) => Math.max(0, Math.floor(Number.isFinite(value) ? value : 0))
+        const maxSharedStrengthLevel = this.getMaxSharedStrengthLevel()
+
+        return {
+            frequencyLevel: normalizeLevel(source.frequencyLevel),
+            amplitudeLevel: normalizeLevel(source.amplitudeLevel),
+            fireRateLevel: normalizeLevel(source.fireRateLevel),
+            strengthLevel: Math.min(normalizeLevel(source.strengthLevel), maxSharedStrengthLevel)
+        }
+
+    }
+
+    getSharedOscillatorLevels() {
+
+        if (!this.sharedOscillatorLevels) {
+            this.sharedOscillatorLevels = this.createSharedOscillatorLevels()
+        }
+
+        return this.sharedOscillatorLevels
+
+    }
+
+    getSharedOscillatorSaveData() {
+
+        const levels = this.getSharedOscillatorLevels()
+
+        return {
+            frequencyLevel: levels.frequencyLevel,
+            amplitudeLevel: levels.amplitudeLevel,
+            fireRateLevel: levels.fireRateLevel,
+            strengthLevel: levels.strengthLevel
+        }
+
+    }
+
+    getMaxSharedStrengthLevel() {
+
+        const minimumBaseStrength = Object.values(LASER_TYPES).reduce((lowestValue, laserType) => {
+            const baseStrength = laserType.baseStrength ?? laserType.strength ?? LASER_BASE_STRENGTH
+            return Math.min(lowestValue, baseStrength)
+        }, Infinity)
+
+        const normalizedMinimum = Number.isFinite(minimumBaseStrength)
+            ? minimumBaseStrength
+            : LASER_BASE_STRENGTH
+
+        return Math.max(0, Math.ceil(MAX_LASER_STRENGTH - normalizedMinimum))
+
+    }
+
+    recalculateLaserTypeStats() {
+
+        const sharedLevels = this.getSharedOscillatorLevels()
+
+        for (const [typeId, laserType] of Object.entries(LASER_TYPES)) {
+            const stats = this.laserTypeStats[typeId]
+            if (!stats) continue
+
+            const baseStrength = laserType.baseStrength ?? laserType.strength ?? LASER_BASE_STRENGTH
+
+            stats.frequencyLevel = sharedLevels.frequencyLevel
+            stats.amplitudeLevel = sharedLevels.amplitudeLevel
+            stats.fireRateLevel = sharedLevels.fireRateLevel
+            stats.strengthLevel = sharedLevels.strengthLevel
+
+            stats.frequency = laserType.baseFrequency + (sharedLevels.frequencyLevel * FREQUENCY_UPGRADE_STEP)
+            stats.amplitude =
+                laserType.baseAmplitude +
+                (sharedLevels.frequencyLevel * FREQUENCY_UPGRADE_AMPLITUDE_BONUS) +
+                (sharedLevels.amplitudeLevel * AMPLITUDE_UPGRADE_STEP)
+            stats.width = Math.min(
+                MAX_LASER_WIDTH,
+                laserType.baseWidth + (sharedLevels.frequencyLevel * FREQUENCY_UPGRADE_WIDTH_BONUS)
+            )
+            stats.fireRate = laserType.baseFireRate + (sharedLevels.fireRateLevel * FIRERATE_UPGRADE_STEP)
+            stats.strength = Math.min(
+                MAX_LASER_STRENGTH,
+                baseStrength + (sharedLevels.strengthLevel * LASER_STRENGTH_UPGRADE_STEP)
+            )
+        }
+
+        if (this.laserTypeStats[this.currentLaserType]) {
+            this.fireInterval = 1 / this.laserFireRate
+        }
+
+    }
+
+    setSharedOscillatorLevels(levels = {}) {
+
+        this.sharedOscillatorLevels = this.createSharedOscillatorLevels(levels)
+        this.recalculateLaserTypeStats()
 
     }
 
@@ -756,9 +812,8 @@ export class Game {
         if (!this.isNextPurchasableLaser("plasma")) return false
 
         const cost = this.getLaserUnlockCost("plasma")
-        if (this.points < cost) return false
+        if (!this.economy.spend(cost)) return false
 
-        this.points -= cost
         this.plasmaUnlocked = true
         return true
 
@@ -770,9 +825,8 @@ export class Game {
         if (!this.isNextPurchasableLaser("pulse")) return false
 
         const cost = this.getLaserUnlockCost("pulse")
-        if (this.points < cost) return false
+        if (!this.economy.spend(cost)) return false
 
-        this.points -= cost
         this.pulseUnlocked = true
         return true
 
@@ -784,9 +838,8 @@ export class Game {
         if (!this.isNextPurchasableLaser("scatter")) return false
 
         const cost = this.getLaserUnlockCost("scatter")
-        if (this.points < cost) return false
+        if (!this.economy.spend(cost)) return false
 
-        this.points -= cost
         this.scatterUnlocked = true
         return true
 
@@ -798,9 +851,8 @@ export class Game {
         if (!this.isNextPurchasableLaser("heavy")) return false
 
         const cost = this.getLaserUnlockCost("heavy")
-        if (this.points < cost) return false
+        if (!this.economy.spend(cost)) return false
 
-        this.points -= cost
         this.heavyUnlocked = true
         return true
 
@@ -1038,8 +1090,8 @@ export class Game {
     getRenderableLaserUpgradeEntries() {
 
         const upgrades = this.getWorldUpgrades()
-        const activeLaserStats = this.laserTypeStats[this.currentLaserType] || {}
-        const strengthMaxed = this.laserStrength >= MAX_LASER_STRENGTH
+        const sharedLevels = this.getSharedOscillatorLevels()
+        const strengthMaxed = sharedLevels.strengthLevel >= this.getMaxSharedStrengthLevel()
         const entries = []
 
         for (const upgradeId of upgrades) {
@@ -1055,10 +1107,10 @@ export class Game {
                 entries.push({
                     id: "frequency",
                     button: this.frequencyButton,
-                    label: "Increase Frequency",
+                    label: "Shared Frequency",
                     cost,
-                    level: activeLaserStats.frequencyLevel || 0,
-                    affordable: this.points >= cost
+                    level: sharedLevels.frequencyLevel || 0,
+                    affordable: this.economy.canAfford(cost)
                 })
                 continue
             }
@@ -1068,10 +1120,10 @@ export class Game {
                 entries.push({
                     id: "amplitude",
                     button: this.amplitudeButton,
-                    label: "Increase Amplitude",
+                    label: "Shared Amplitude",
                     cost,
-                    level: activeLaserStats.amplitudeLevel || 0,
-                    affordable: this.points >= cost
+                    level: sharedLevels.amplitudeLevel || 0,
+                    affordable: this.economy.canAfford(cost)
                 })
                 continue
             }
@@ -1084,10 +1136,10 @@ export class Game {
                 entries.push({
                     id: "fireRate",
                     button: this.fireRateButton,
-                    label: "Increase Fire Rate",
+                    label: "Shared Fire Rate",
                     cost,
-                    level: activeLaserStats.fireRateLevel || 0,
-                    affordable: this.points >= cost
+                    level: sharedLevels.fireRateLevel || 0,
+                    affordable: this.economy.canAfford(cost)
                 })
                 continue
             }
@@ -1097,10 +1149,10 @@ export class Game {
                 entries.push({
                     id: "strength",
                     button: this.strengthButton,
-                    label: "Increase Laser Strength",
+                    label: "Shared Laser Strength",
                     cost,
-                    level: activeLaserStats.strengthLevel || 0,
-                    affordable: !strengthMaxed && this.points >= cost
+                    level: sharedLevels.strengthLevel || 0,
+                    affordable: !strengthMaxed && this.economy.canAfford(cost)
                 })
                 continue
             }
@@ -1114,8 +1166,6 @@ export class Game {
 
         const targetType = String(type || "")
         if (!targetType) return
-
-        this.runKills += 1
 
         if (!this.discoveredTargets.has(targetType)) {
             this.discoveredTargets.add(targetType)
@@ -1142,36 +1192,10 @@ export class Game {
             return
         }
 
-        if (this.showArchivesMenu) {
-            this.handleArchivesMenuClick(mouseX, mouseY)
-            return
-        }
-
-        if (this.showProgressMatrix) {
-            this.handleProgressMatrixClick(mouseX, mouseY)
-            return
-        }
+        if (this.overlayController.handleClick(mouseX, mouseY)) return
 
         if (this.gameState === GAME_STATE_TITLE) {
-            if (this.showTargetIndex) {
-                this.handleTargetIndexClick(mouseX, mouseY)
-                return
-            }
-            if (this.showInfoScreen) {
-                this.handleInfoScreenClick(mouseX, mouseY)
-                return
-            }
             this.handleTitleClick(mouseX, mouseY)
-            return
-        }
-
-        if (this.showTargetIndex) {
-            this.handleTargetIndexClick(mouseX, mouseY)
-            return
-        }
-
-        if (this.showInfoScreen) {
-            this.handleInfoScreenClick(mouseX, mouseY)
             return
         }
 
@@ -1235,29 +1259,7 @@ export class Game {
 
     handleWheel(event) {
 
-        if (this.showArchivesMenu) {
-            event.preventDefault()
-            return
-        }
-
-        if (this.showProgressMatrix) {
-            event.preventDefault()
-            return
-        }
-
-        if (this.showTargetIndex) {
-            event.preventDefault()
-            this.targetIndexScroll += event.deltaY
-            this.clampTargetIndexScroll()
-            return
-        }
-
-        if (this.showInfoScreen) {
-            event.preventDefault()
-            this.infoScroll += event.deltaY
-            this.clampInfoScroll()
-            return
-        }
+        if (this.overlayController.handleWheel(event)) return
 
         if (this.gameState !== GAME_STATE_PLAYING) {
             return
@@ -1461,40 +1463,9 @@ export class Game {
             return
         }
 
-        if (this.showArchivesMenu) {
-            this.canvas.style.cursor = this.isHoveringArchivesMenuButton(this.mouseX, this.mouseY)
-                ? "pointer"
-                : "default"
-            return
-        }
+        if (this.overlayController.updateCursor(this.mouseX, this.mouseY)) return
 
         if (this.gameState === GAME_STATE_TITLE) {
-            if (this.showProgressMatrix) {
-                const hoveringMatrixCard = this.getProgressMatrixHoveredCard(this.mouseX, this.mouseY)
-                const canBuyHoveredNode = Boolean(
-                    hoveringMatrixCard && this.canPurchaseProgressNode(hoveringMatrixCard.node)
-                )
-                this.canvas.style.cursor = (
-                    this.isHoveringProgressMatrixBackButton(this.mouseX, this.mouseY) ||
-                    canBuyHoveredNode
-                ) ? "pointer" : "default"
-                return
-            }
-
-            if (this.showTargetIndex) {
-                this.canvas.style.cursor = this.isHoveringTargetIndexBackButton(this.mouseX, this.mouseY)
-                    ? "pointer"
-                    : "default"
-                return
-            }
-
-            if (this.showInfoScreen) {
-                this.canvas.style.cursor = this.isHoveringInfoBackButton(this.mouseX, this.mouseY)
-                    ? "pointer"
-                    : "default"
-                return
-            }
-
             const titleButtons = this.getTitleButtons()
             const hoveringTitleButton = titleButtons.some(
                 button => this.isInsideButton(this.mouseX, this.mouseY, button)
@@ -1505,32 +1476,6 @@ export class Game {
 
         if (this.gameState !== GAME_STATE_PLAYING) {
             this.canvas.style.cursor = "default"
-            return
-        }
-
-        if (this.showProgressMatrix) {
-            const hoveringMatrixCard = this.getProgressMatrixHoveredCard(this.mouseX, this.mouseY)
-            const canBuyHoveredNode = Boolean(
-                hoveringMatrixCard && this.canPurchaseProgressNode(hoveringMatrixCard.node)
-            )
-            this.canvas.style.cursor = (
-                this.isHoveringProgressMatrixBackButton(this.mouseX, this.mouseY) ||
-                canBuyHoveredNode
-            ) ? "pointer" : "default"
-            return
-        }
-
-        if (this.showTargetIndex) {
-            this.canvas.style.cursor = this.isHoveringTargetIndexBackButton(this.mouseX, this.mouseY)
-                ? "pointer"
-                : "default"
-            return
-        }
-
-        if (this.showInfoScreen) {
-            this.canvas.style.cursor = this.isHoveringInfoBackButton(this.mouseX, this.mouseY)
-                ? "pointer"
-                : "default"
             return
         }
 
@@ -1660,10 +1605,7 @@ export class Game {
             this.saveSystem.load()
             this.hasSaveGame = true
             this.gameState = GAME_STATE_PLAYING
-            this.showInfoScreen = false
-            this.showTargetIndex = false
-            this.showProgressMatrix = false
-            this.showArchivesMenu = false
+            this.overlayController.closeAll()
             return
         }
 
@@ -1674,10 +1616,7 @@ export class Game {
             this.resetRunTelemetry()
             this.hasSaveGame = false
             this.gameState = GAME_STATE_PLAYING
-            this.showInfoScreen = false
-            this.showTargetIndex = false
-            this.showProgressMatrix = false
-            this.showArchivesMenu = false
+            this.overlayController.closeAll()
             return
         }
 
@@ -1685,10 +1624,7 @@ export class Game {
             this.resetRunTelemetry()
             this.gameState = GAME_STATE_PLAYING
             this.musicQueue = []
-            this.showInfoScreen = false
-            this.showTargetIndex = false
-            this.showProgressMatrix = false
-            this.showArchivesMenu = false
+            this.overlayController.closeAll()
             if (!this.audioUnlocked) {
                 this.unlockAudio()
             }
@@ -1703,10 +1639,7 @@ export class Game {
         }
 
         if (clickedButton.id === "archives") {
-            this.showArchivesMenu = true
-            this.showInfoScreen = false
-            this.showTargetIndex = false
-            this.showProgressMatrix = false
+            this.overlayController.open("archives")
         }
 
     }
@@ -1716,12 +1649,7 @@ export class Game {
         this.showPauseMenu = !this.showPauseMenu
         this.isPaused = this.showPauseMenu
         if (!this.showPauseMenu) {
-            this.showInfoScreen = false
-            this.infoScroll = 0
-            this.showTargetIndex = false
-            this.targetIndexScroll = 0
-            this.showProgressMatrix = false
-            this.showArchivesMenu = false
+            this.overlayController.closeAll()
         }
         this.canvas.style.cursor = "default"
 
@@ -1809,10 +1737,7 @@ export class Game {
         }
 
         if (clickedButton.id === "archives") {
-            this.showArchivesMenu = true
-            this.showInfoScreen = false
-            this.showTargetIndex = false
-            this.showProgressMatrix = false
+            this.overlayController.open("archives")
             return
         }
 
@@ -1820,18 +1745,12 @@ export class Game {
             this.showPauseMenu = false
             this.isPaused = false
             this.gameState = GAME_STATE_TITLE
-            this.saveSystemLoaded = false
-            this.hasLaser = false
             if (this.currentMusic) {
                 this.currentMusic.pause()
             }
-            this.showInfoScreen = false
-            this.showTargetIndex = false
             this.isPaused = false
             this.currentMusic = null
-            this.titleInitialized = false
-            this.showProgressMatrix = false
-            this.showArchivesMenu = false
+            this.overlayController.closeAll()
         }
 
     }
@@ -1919,32 +1838,21 @@ export class Game {
         if (!clickedButton) return
 
         if (clickedButton.id === "info") {
-            this.showArchivesMenu = false
-            this.showInfoScreen = true
-            this.infoScroll = 0
-            this.showTargetIndex = false
-            this.showProgressMatrix = false
+            this.overlayController.open("info")
             return
         }
 
         if (clickedButton.id === "targetIndex") {
-            this.showArchivesMenu = false
-            this.showTargetIndex = true
-            this.targetIndexScroll = 0
-            this.showInfoScreen = false
-            this.showProgressMatrix = false
+            this.overlayController.open("targetIndex")
             return
         }
 
         if (clickedButton.id === "progressMatrix") {
-            this.showArchivesMenu = false
-            this.showProgressMatrix = true
-            this.showInfoScreen = false
-            this.showTargetIndex = false
+            this.overlayController.open("progressMatrix")
             return
         }
 
-        this.showArchivesMenu = false
+        this.overlayController.closeAll()
 
     }
 
@@ -2071,7 +1979,7 @@ export class Game {
             },
             {
                 title: "CORE LOOP",
-                body: "Destroy targets to earn Energy Points. Spend Energy Points on new lasers, laser stat upgrades, target economy upgrades, automation systems, and mastery upgrades. As you grow stronger, you charge the Transport Beam and travel to new worlds, where progression resets but your long-term world scaling continues."
+                body: "Destroy targets to earn Energy Points. Spend Energy Points on new lasers, shared oscillator upgrades, target economy upgrades, automation systems, and mastery upgrades. As you grow stronger, you charge the Transport Beam and travel to new worlds, where progression resets but your long-term world scaling continues."
             },
             {
                 title: "CONTROLS",
@@ -2087,7 +1995,7 @@ export class Game {
             },
             {
                 title: "LASER UPGRADES",
-                body: "Frequency changes wave density and improves coverage. Amplitude increases wave height, helping reach more targets. Fire Rate increases how often lasers can fire. Laser Strength increases damage per hit. Different laser types scale differently, so switching weapons can change your optimal build."
+                body: "Core laser upgrades now improve your shared oscillator engineering across the whole arsenal. Frequency changes wave density and adds some width and coverage. Amplitude increases wave height. Fire Rate increases how often lasers can fire. Laser Strength increases damage per hit. New lasers inherit this shared waveform progress immediately, while mastery remains weapon-specific."
             },
             {
                 title: "LASER MASTERY",
@@ -2204,7 +2112,7 @@ export class Game {
 
         const { backButton } = this.getInfoScreenLayout()
         if (this.isInsideButton(mouseX, mouseY, backButton)) {
-            this.showInfoScreen = false
+            this.overlayController.closeAll()
             this.canvas.style.cursor = "default"
         }
 
@@ -2339,7 +2247,7 @@ export class Game {
 
         const { backButton } = this.getTargetIndexLayout()
         if (this.isInsideButton(mouseX, mouseY, backButton)) {
-            this.showTargetIndex = false
+            this.overlayController.closeAll()
             this.canvas.style.cursor = "default"
         }
 
@@ -2449,7 +2357,7 @@ export class Game {
 
         const { backButton } = this.getProgressMatrixLayout()
         if (this.isInsideButton(mouseX, mouseY, backButton)) {
-            this.showProgressMatrix = false
+            this.overlayController.closeAll()
             this.canvas.style.cursor = "default"
             return
         }
@@ -2679,9 +2587,8 @@ export class Game {
 
             if (!this.isPanelSectionExpanded("lasers")) return
             if (!this.isInsideButton(mouseX, mouseY, this.unlockButton)) return
-            if (this.points < this.simpleLaserCost) return
+            if (!this.economy.spend(this.simpleLaserCost)) return
 
-            this.points -= this.simpleLaserCost
             this.hasLaser = true
             this.triggerUpgradeFlash(this.unlockButton)
 
@@ -2714,6 +2621,7 @@ export class Game {
                     if (!purchased) return
 
                     const laserName = LASER_TYPES[typeId]?.name || "Laser"
+                    this.switchLaserType(typeId)
                     this.triggerUpgradeFlash(button)
                     this.floatingTexts.push(
                         new FloatingText(
@@ -2789,9 +2697,8 @@ export class Game {
         if (this.isPanelSectionExpanded("automation") && this.isInsideButton(mouseX, mouseY, this.autoFireButton)) {
 
             if (this.autoFireUnlocked) return
-            if (this.points < this.autoFireCost) return
+            if (!this.economy.spend(this.autoFireCost)) return
 
-            this.points -= this.autoFireCost
             this.autoFireUnlocked = true
             this.autoFireEnabled = true
             this.lastAutoShotTime = -Infinity
@@ -2815,9 +2722,8 @@ export class Game {
             this.isInsideButton(mouseX, mouseY, this.worldGatePurchaseButton)
         ) {
             const worldGateCost = this.getWorldGateCost()
-            if (this.points < worldGateCost) return
+            if (!this.economy.spend(worldGateCost)) return
 
-            this.points -= worldGateCost
             this.worldGatePurchased = true
             this.triggerUpgradeFlash(this.worldGatePurchaseButton)
 
@@ -2835,8 +2741,7 @@ export class Game {
         if (this.isPanelSectionExpanded("world") && this.isBossPrepPhase()) {
             if (!this.bossPrepShield && this.isInsideButton(mouseX, mouseY, this.bossPrepShieldButton)) {
                 const shieldCost = this.getBossPrepCost(BOSS_PREP_SHIELD_COST)
-                if (this.points < shieldCost) return
-                this.points -= shieldCost
+                if (!this.economy.spend(shieldCost)) return
                 this.bossPrepShield = true
                 this.triggerUpgradeFlash(this.bossPrepShieldButton)
                 this.floatingTexts.push(
@@ -2852,8 +2757,7 @@ export class Game {
 
             if (!this.bossPrepOvercharger && this.isInsideButton(mouseX, mouseY, this.bossPrepOverchargerButton)) {
                 const overchargerCost = this.getBossPrepCost(BOSS_PREP_OVERCHARGER_COST)
-                if (this.points < overchargerCost) return
-                this.points -= overchargerCost
+                if (!this.economy.spend(overchargerCost)) return
                 this.bossPrepOvercharger = true
                 this.triggerUpgradeFlash(this.bossPrepOverchargerButton)
                 this.floatingTexts.push(
@@ -2869,8 +2773,7 @@ export class Game {
 
             if (!this.bossPrepStabilizer && this.isInsideButton(mouseX, mouseY, this.bossPrepStabilizerButton)) {
                 const stabilizerCost = this.getBossPrepCost(BOSS_PREP_STABILIZER_COST)
-                if (this.points < stabilizerCost) return
-                this.points -= stabilizerCost
+                if (!this.economy.spend(stabilizerCost)) return
                 this.bossPrepStabilizer = true
                 this.triggerUpgradeFlash(this.bossPrepStabilizerButton)
                 this.floatingTexts.push(
@@ -3059,24 +2962,19 @@ export class Game {
                 continue
             }
 
-            target.hitFlashTime = target.hitFlashDuration
-            const previousHealth = target.health
-            target.health -= shockwaveDamage
-            const dealt = Math.max(0, previousHealth - Math.max(0, target.health))
-            this.recordDamageDealt(dealt)
+            if (!this.collisionSystem) continue
 
-            if (this.particleSystem) {
-                this.particleSystem.spawnExplosion(target.x, target.y, 2, "#8be8ff")
-            }
-
-            if (target.health <= 0 && this.collisionSystem) {
-                this.collisionSystem.destroyTarget(
-                    this.targets,
-                    i,
-                    null,
-                    { allowPulseShockwave: false }
-                )
-            }
+            this.collisionSystem.applyDamageToTarget(
+                this.targets,
+                i,
+                shockwaveDamage,
+                null,
+                {
+                    hitParticleCount: 2,
+                    hitParticleColor: "#8be8ff",
+                    destroyOptions: { allowPulseShockwave: false }
+                }
+            )
         }
 
     }
@@ -4010,7 +3908,7 @@ export class Game {
 
     resetProgression() {
 
-        this.setPointsRaw(0)
+        this.economy.setRaw(0)
         this.resetRunTelemetry()
 
         this.clickDamage = 1
@@ -4028,8 +3926,9 @@ export class Game {
         this.lastAutoShotTime = -Infinity
         this.lastManualShotTime = -Infinity
 
+        this.sharedOscillatorLevels = this.createSharedOscillatorLevels()
         this.laserTypeStats = this.createLaserTypeStats()
-        this.fireInterval = 1 / this.laserFireRate
+        this.recalculateLaserTypeStats()
 
         this.targetUpgradeSystem.valueLevel = 0
         this.targetUpgradeSystem.spawnRateLevel = 0
@@ -4197,34 +4096,41 @@ export class Game {
 
                 this.particleSystem.spawnExplosion(target.x, target.y, 4, "#ff7a4d")
 
-                this.floatingTexts.push(
-                    new FloatingText(
-                        target.x + (Math.random() - 0.5) * 10,
-                        target.y + (Math.random() - 0.5) * 10,
-                        "-" + this.clickDamage,
-                        "#ff9a66"
+                if (this.collisionSystem) {
+                    const damageResult = this.collisionSystem.applyDamageToTarget(
+                        this.targets,
+                        i,
+                        this.clickDamage,
+                        null,
+                        {
+                            spawnHitParticles: false,
+                            destroyOptions: { allowPulseShockwave: false }
+                        }
                     )
-                )
 
-                target.hitFlashTime = target.hitFlashDuration
-                const previousHealth = target.health
-                target.health -= this.clickDamage
-                const clickDamageDealt = Math.max(0, previousHealth - Math.max(0, target.health))
-                this.recordDamageDealt(clickDamageDealt)
+                    if (damageResult.dealt > 0) {
+                        const displayedDamage = Number.isInteger(damageResult.dealt)
+                            ? damageResult.dealt
+                            : damageResult.dealt.toFixed(1)
 
-                if (target.health <= 0) {
-                    this.particleSystem.spawnExplosion(target.x, target.y, 12, "#ffb84d")
-                    this.points += target.value
-                    this.runKills += 1
+                        this.floatingTexts.push(
+                            new FloatingText(
+                                target.x + (Math.random() - 0.5) * 10,
+                                target.y + (Math.random() - 0.5) * 10,
+                                "-" + displayedDamage,
+                                "#ff9a66"
+                            )
+                        )
+                    }
+                } else {
                     this.floatingTexts.push(
                         new FloatingText(
                             target.x + (Math.random() - 0.5) * 10,
                             target.y + (Math.random() - 0.5) * 10,
-                            "+" + target.value,
-                            "#ffffff"
+                            "-" + this.clickDamage,
+                            "#ff9a66"
                         )
                     )
-                    this.targets.splice(i, 1)
                 }
 
                 return
@@ -4364,7 +4270,7 @@ export class Game {
             }
             if (
                 this.worldGateAffordableTime == null &&
-                this.points >= this.getWorldGateCost()
+                this.economy.canAfford(this.getWorldGateCost())
             ) {
                 this.worldGateAffordableTime = this.runTime
             }
@@ -4392,19 +4298,7 @@ export class Game {
             this.playRandomMusic()
         }
 
-        if (this.showTargetIndex) {
-            return
-        }
-
-        if (this.showInfoScreen) {
-            return
-        }
-
-        if (this.showProgressMatrix) {
-            return
-        }
-
-        if (this.showArchivesMenu) {
+        if (this.overlayController.getActiveOverlayName()) {
             return
         }
 
@@ -4466,23 +4360,12 @@ export class Game {
 
         for (let target of this.targets) {
             target.gridLeftBoundary = this.gridX
-            target.update(scaledDelta) 
+            target.update(scaledDelta)
             this.applyGravityWellsToTarget(target, scaledDelta)
-        }
-
-        let healthBeforeCollision = 0
-        for (const target of this.targets) {
-            healthBeforeCollision += Math.max(0, target.health || 0)
         }
 
         this.targets = this.targets.filter(target => !target.shouldRemove)
         this.collisionSystem.check()
-
-        let healthAfterCollision = 0
-        for (const target of this.targets) {
-            healthAfterCollision += Math.max(0, target.health || 0)
-        }
-        this.recordDamageDealt(Math.max(0, healthBeforeCollision - healthAfterCollision))
 
         this.particleSystem.update(scaledDelta)
 
@@ -4553,31 +4436,18 @@ export class Game {
 
             this.drawTitleScene(this.ctx)
             this.drawTitleScreen(this.ctx)
-            if (this.showInfoScreen) {
-                this.drawInfoScreen(this.ctx)
-            }
-            if (this.showTargetIndex) {
-                this.drawTargetIndex(this.ctx)
-            }
-            if (this.showProgressMatrix) {
-                this.drawProgressMatrix(this.ctx)
-            }
+            this.overlayController.draw(this.ctx)
             if (this.showBalanceOverlay) {
                 this.drawBalanceOverlay(this.ctx)
-            }
-            if (this.showArchivesMenu) {
-                this.drawArchivesMenu(this.ctx)
             }
             return
         }
 
         if (this.gameState === GAME_STATE_BOSS) {
             this.drawBossFightScreen(this.ctx)
+            this.overlayController.draw(this.ctx)
             if (this.showBalanceOverlay) {
                 this.drawBalanceOverlay(this.ctx)
-            }
-            if (this.showArchivesMenu) {
-                this.drawArchivesMenu(this.ctx)
             }
             return
         }
@@ -4627,22 +4497,9 @@ export class Game {
             this.drawPauseMenu(this.ctx)
         }
 
-        if (this.showInfoScreen) {
-            this.drawInfoScreen(this.ctx)
-        }
-
-        if (this.showTargetIndex) {
-            this.drawTargetIndex(this.ctx)
-        }
-
-        if (this.showProgressMatrix) {
-            this.drawProgressMatrix(this.ctx)
-        }
+        this.overlayController.draw(this.ctx)
         if (this.showBalanceOverlay) {
             this.drawBalanceOverlay(this.ctx)
-        }
-        if (this.showArchivesMenu) {
-            this.drawArchivesMenu(this.ctx)
         }
     }
 
@@ -6100,7 +5957,7 @@ export class Game {
                 const canPurchase = !isUnlocked && this.isNextPurchasableLaser(typeId)
                 const unlockCost = canPurchase ? this.getLaserUnlockCost(typeId) : 0
                 const subtitle = canPurchase ? unlockCost : ""
-                const enabled = isUnlocked || (canPurchase && this.points >= unlockCost)
+                const enabled = isUnlocked || (canPurchase && this.economy.canAfford(unlockCost))
 
                 button.y = contentY
 
@@ -6129,7 +5986,7 @@ export class Game {
                         "Pulse Mastery",
                         this.upgradeSystem.getPulseMasteryCost(),
                         this.pulseMasteryLevel,
-                        this.points >= this.upgradeSystem.getPulseMasteryCost()
+                        this.economy.canAfford(this.upgradeSystem.getPulseMasteryCost())
                     )
                 }
                 contentY += this.pulseMasteryButton.height + cardSpacing
@@ -6143,7 +6000,7 @@ export class Game {
                         "Scatter Mastery",
                         this.upgradeSystem.getScatterMasteryCost(),
                         this.scatterMasteryLevel,
-                        this.points >= this.upgradeSystem.getScatterMasteryCost()
+                        this.economy.canAfford(this.upgradeSystem.getScatterMasteryCost())
                     )
                 }
                 contentY += this.scatterMasteryButton.height + cardSpacing
@@ -6157,7 +6014,7 @@ export class Game {
                         "Heavy Mastery",
                         this.upgradeSystem.getHeavyMasteryCost(),
                         this.heavyMasteryLevel,
-                        this.points >= this.upgradeSystem.getHeavyMasteryCost()
+                        this.economy.canAfford(this.upgradeSystem.getHeavyMasteryCost())
                     )
                 }
                 contentY += this.heavyMasteryButton.height + cardSpacing
@@ -6197,7 +6054,7 @@ export class Game {
                     "Increase Target Value",
                     targetValueCost,
                     this.targetUpgradeSystem.valueLevel,
-                    this.points >= targetValueCost
+                    this.economy.canAfford(targetValueCost)
                 )
             }
             contentY += this.targetValueButton.height + cardSpacing
@@ -6210,7 +6067,7 @@ export class Game {
                     "Increase Spawn Rate",
                     targetSpawnRateCost,
                     this.targetUpgradeSystem.spawnRateLevel,
-                    this.points >= targetSpawnRateCost
+                    this.economy.canAfford(targetSpawnRateCost)
                 )
             }
             contentY += this.targetSpawnRateButton.height + cardSpacing
@@ -6223,7 +6080,7 @@ export class Game {
                     "Increase Target Diversity",
                     targetDiversityCost,
                     this.targetUpgradeSystem.diversityLevel,
-                    this.points >= targetDiversityCost
+                    this.economy.canAfford(targetDiversityCost)
                 )
             }
             contentY += this.targetDiversityButton.height + cardSpacing
@@ -6236,7 +6093,7 @@ export class Game {
                     "Increase Click DMG (" + this.clickDamage + ")",
                     clickDamageCost,
                     this.clickUpgradeLevel,
-                    this.points >= clickDamageCost
+                    this.economy.canAfford(clickDamageCost)
                 )
             }
             contentY += this.clickDamageButton.height + cardSpacing
@@ -6253,7 +6110,7 @@ export class Game {
                         this.autoFireButton,
                         "ENABLE AUTO FIRE",
                         this.autoFireCost,
-                        this.points >= this.autoFireCost
+                        this.economy.canAfford(this.autoFireCost)
                     )
                 } else {
                     this.drawPanelActionButton(
@@ -6373,7 +6230,7 @@ export class Game {
                         this.worldGatePurchaseButton,
                         "PURCHASE WORLD GATE",
                         worldGateCost,
-                        this.points >= worldGateCost
+                        this.economy.canAfford(worldGateCost)
                     )
                 } else if (this.transportReady && this.worldGatePurchased) {
                     this.ctx.fillStyle = "#0f6a7a"
@@ -6417,7 +6274,7 @@ export class Game {
                                 entry.button,
                                 entry.title,
                                 entry.cost,
-                                this.points >= entry.cost
+                                this.economy.canAfford(entry.cost)
                             )
                         }
                     }
