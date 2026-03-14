@@ -34,6 +34,7 @@ Frequency Laser Clicker uses a modular, file-per-system structure around a singl
   - `WorldSystem`
 - Manage laser-type stat containers and active type switching
 - Own boss-fight runtime and temporary boss mutation state
+- Own dev-only pacing telemetry and recent-run summary buffering
 
 ### Update Cycle
 
@@ -76,6 +77,14 @@ Responsibilities:
 - Centralizes overlay cursor routing
 - Centralizes overlay draw dispatch
 
+## Dev Telemetry (`src/game.js`)
+
+Responsibilities:
+- Tracks live balance metrics for the `F8` overlay
+- Tracks weapon usage during normal runs
+- Tracks boss shot accuracy by weapon type
+- Stores a capped recent-run summary buffer in local storage under `frequencyLaserClickerRunSummaries`
+
 ## WorldSystem (`src/worldSystem.js`)
 
 Responsibilities:
@@ -87,6 +96,15 @@ Responsibilities:
 - Modifies incoming damage for world mechanics such as cryo shells and void resonance
 - Draws low-alpha world field effects behind the combat grid
 - Supplies readable world intel lines for the WORLD panel
+
+## Boss Runtime (`src/game.js`)
+
+Current boss-specific temporary systems remain in `src/game.js`:
+- carried-over boss weapon profile
+- boss phase mutation registry/state
+- boss reaction state and style dispatch
+
+When extending boss fights, prefer helper-driven mutation/reaction hooks over scattering direct conditionals through update/render paths.
 
 ## SpawnSystem (`src/spawn.js`)
 

@@ -77,6 +77,13 @@
    - floating text
 5. Ensure the mutation changes how the player fights, not just the numbers underneath.
 
+## Adding or Changing Boss Reaction Logic
+1. Treat reactions as boss-fight-scoped runtime state only.
+2. Prefer reacting to mutation categories such as burst, coverage, sustain, phase, or defense instead of single upgrade IDs.
+3. Route style-specific responses through helper dispatch in `game.js`.
+4. Make the reaction readable through cadence, hazards, shell states, mirrored shots, HUD text, or other visible combat feedback.
+5. Do not use reactions to hard-counter the player continuously; the goal is tension and adaptation, not invalidation.
+
 ## Adding a New Laser Type
 1. Add entry in `laserTypes.js` with base stats/colors/multipliers.
 2. Ensure `game.js` unlock/switch flow includes it.
@@ -106,3 +113,17 @@
 - Spawn pacing remains smooth and capped.
 - Collision behaves correctly for all target types.
 - Laser type switching and upgrade effects remain consistent.
+- `F8` balance overlay updates unlock, gate, prep, boss timing, and boss shot-accuracy telemetry correctly.
+- Recent run summaries are appended to `localStorage["frequencyLaserClickerRunSummaries"]` on world advance and menu exit.
+
+## Guided Balance Playtests
+
+- Use `F8` during fresh-save runs to monitor:
+  - unlock timings
+  - gate-loop timings
+  - prep spend
+  - boss result
+  - weapon usage lead
+  - boss weapon accuracy lead
+- After each run, inspect `localStorage["frequencyLaserClickerRunSummaries"]` to compare the last 3-5 runs without manually copying overlay values.
+- Prefer per-world run summaries over a single marathon session; world advance resets run telemetry by design.

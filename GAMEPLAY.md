@@ -9,6 +9,8 @@
 5. Player upgrades combat and economy systems.
 6. Player unlocks auto-fire and continues scaling.
 7. Player unlocks/switches laser tiers for stronger visuals/stats.
+8. Player fills transport charge, buys the world gate, optionally buys boss prep, and enters the boss fight.
+9. Boss wins grant Core Fragments for long-term Progress Matrix upgrades.
 
 ## Laser Mechanics
 
@@ -159,6 +161,21 @@ Current mutation behaviors include:
   - taking a hit arms the next shot into a counter-surge
 
 These mutations are temporary to the current boss fight and are intended to change how the player fights immediately.
+
+## Boss Reactions To Signal Mutations
+
+Bosses now interpret those temporary signal mutations instead of passively eating the effects.
+
+- Calibration Core
+  - reacts in a readable way with tracking-lock responses after repeated clean pressure
+- Storm Reactor
+  - escalates into faster retaliation bursts when the player leans into burst or wide-coverage mutations
+- Cryo Lattice Heart
+  - refreshes a defensive cryo shell and reinforces lane denial when the player forces sustained openings
+- Void Pulse Engine
+  - distorts into mirrored or phantom pressure when the player leans on graze/phase-oriented mutations
+
+The intent is not to invalidate the player’s choice. The intent is to make the fight feel like an adaptive duel where mutation categories matter differently against different bosses.
 
 ## Automation and Fire-Rate Coupling
 

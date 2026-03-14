@@ -27,3 +27,6 @@ This file summarizes current technical behavior and points to the canonical root
 - Clicks in panel account for `panelScroll` offset.
 - Spawn uses interval catch-up and `MAX_ACTIVE_TARGETS` cap.
 - Collision includes vertical reach early-out before sine sampling.
+- Boss fights currently keep mutation and boss-reaction state in `src/game.js`, with style dispatch keyed off the active world boss config.
+- `src/game.js` also owns lightweight dev-only balance telemetry for unlock timing, gate timing, prep spend, boss outcome, and boss shot accuracy.
+- Recent run summaries are buffered in browser local storage under `frequencyLaserClickerRunSummaries` so 3-5 fresh-save playtests can be compared after the fact.

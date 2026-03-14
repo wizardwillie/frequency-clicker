@@ -348,6 +348,9 @@ export class CollisionSystem {
         if (!target) return
 
         this.game.runKills += 1
+        if (sourceLaser?.laserTypeId && typeof this.game.recordWeaponKill === "function") {
+            this.game.recordWeaponKill(sourceLaser.laserTypeId)
+        }
 
         if (typeof this.game.registerTargetDiscovery === "function") {
             this.game.registerTargetDiscovery(target.type)

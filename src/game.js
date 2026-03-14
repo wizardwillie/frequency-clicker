@@ -15,6 +15,9 @@ import { SaveSystem } from "./saveSystem.js"
 import {
     SIMPLE_LASER_COST,
     PLASMA_UNLOCK_POINTS,
+    PULSE_UNLOCK_POINTS,
+    SCATTER_UNLOCK_POINTS,
+    HEAVY_UNLOCK_POINTS,
     AUTO_FIRE_COST,
     AUTO_FIRE_SPEED_MULTIPLIER,
     BASE_MANUAL_FIRE_COOLDOWN,
@@ -111,7 +114,7 @@ export class Game {
         this.bossHealth = 0
         this.bossMaxHealth = 0
         this.bossFightTimer = 0
-        this.bossFightTimeLimit = 20
+        this.bossFightTimeLimit = 24
         this.bossTargetWorld = null
         this.activeBossConfig = null
         this.bossLaserY = this.canvas.height / 2
@@ -152,6 +155,7 @@ export class Game {
         this.bossPhaseBuffCooldownMultiplier = 1
         this.bossPhaseBuffExtraLives = 0
         this.bossPhaseUpgradeState = this.createBossPhaseUpgradeState()
+        this.bossReactionState = this.createBossReactionState()
         this.activeWorldModifiers = []
         this.gravityWells = []
         this.gravityWellTimer = 0
@@ -169,8 +173,28 @@ export class Game {
         this.runBossLosses = 0
         this.runCoreFragmentsEarned = 0
         this.firstLaserUnlockTime = null
+        this.autoFireUnlockTime = null
+        this.weaponTelemetry = this.createWeaponTelemetry()
+        this.bossWeaponTelemetry = this.createBossWeaponTelemetry()
+        this.laserUnlockTimes = {
+            plasma: null,
+            pulse: null,
+            scatter: null,
+            heavy: null
+        }
         this.transportReadyTime = null
         this.worldGateAffordableTime = null
+        this.worldGatePurchasedTime = null
+        this.bossStartTime = null
+        this.bossPrepPurchases = 0
+        this.bossPrepPointsSpent = 0
+        this.bossShotsFired = 0
+        this.bossShotsHit = 0
+        this.bossShotsGraze = 0
+        this.bossShotsMissed = 0
+        this.bossResult = "--"
+        this.runSummaryStorageKey = "frequencyLaserClickerRunSummaries"
+        this.recentRunSummaries = this.loadRecentRunSummaries()
         this.lastBalanceSampleTime = 0
         this.recentDamageDealt = 0
         this.recentDamageWindow = 0
@@ -203,9 +227,9 @@ export class Game {
         this.autoFireUnlocked = false
         this.autoFireEnabled = false
         this.plasmaUnlockPoints = PLASMA_UNLOCK_POINTS
-        this.pulseUnlockPoints = Math.floor(this.plasmaUnlockPoints * 2)
-        this.scatterUnlockPoints = Math.floor(this.plasmaUnlockPoints * 5)
-        this.heavyUnlockPoints = Math.floor(this.plasmaUnlockPoints * 10)
+        this.pulseUnlockPoints = PULSE_UNLOCK_POINTS
+        this.scatterUnlockPoints = SCATTER_UNLOCK_POINTS
+        this.heavyUnlockPoints = HEAVY_UNLOCK_POINTS
         this.plasmaUnlocked = false
         this.pulseUnlocked = false
         this.scatterUnlocked = false
@@ -519,11 +543,149 @@ export class Game {
         this.runBossLosses = 0
         this.runCoreFragmentsEarned = 0
         this.firstLaserUnlockTime = null
+        this.autoFireUnlockTime = null
+        this.weaponTelemetry = this.createWeaponTelemetry()
+        this.bossWeaponTelemetry = this.createBossWeaponTelemetry()
+        this.laserUnlockTimes = {
+            plasma: null,
+            pulse: null,
+            scatter: null,
+            heavy: null
+        }
         this.transportReadyTime = null
         this.worldGateAffordableTime = null
+        this.worldGatePurchasedTime = null
+        this.bossStartTime = null
+        this.bossPrepPurchases = 0
+        this.bossPrepPointsSpent = 0
+        this.bossShotsFired = 0
+        this.bossShotsHit = 0
+        this.bossShotsGraze = 0
+        this.bossShotsMissed = 0
+        this.bossResult = "--"
         this.lastBalanceSampleTime = 0
         this.recentDamageDealt = 0
         this.recentDamageWindow = 0
+
+    }
+
+    createWeaponTelemetry() {
+
+        return {
+            simple: { activeTime: 0, shots: 0, kills: 0, equips: 0 },
+            plasma: { activeTime: 0, shots: 0, kills: 0, equips: 0 },
+            pulse: { activeTime: 0, shots: 0, kills: 0, equips: 0 },
+            scatter: { activeTime: 0, shots: 0, kills: 0, equips: 0 },
+            heavy: { activeTime: 0, shots: 0, kills: 0, equips: 0 }
+        }
+
+    }
+
+    createBossWeaponTelemetry() {
+
+        return {
+            simple: { attempts: 0, wins: 0, losses: 0, fired: 0, hit: 0, graze: 0, miss: 0 },
+            plasma: { attempts: 0, wins: 0, losses: 0, fired: 0, hit: 0, graze: 0, miss: 0 },
+            pulse: { attempts: 0, wins: 0, losses: 0, fired: 0, hit: 0, graze: 0, miss: 0 },
+            scatter: { attempts: 0, wins: 0, losses: 0, fired: 0, hit: 0, graze: 0, miss: 0 },
+            heavy: { attempts: 0, wins: 0, losses: 0, fired: 0, hit: 0, graze: 0, miss: 0 }
+        }
+
+    }
+
+    recordLaserUnlock(typeId) {
+
+        if (!typeId || !this.laserUnlockTimes || !(typeId in this.laserUnlockTimes)) {
+            return
+        }
+
+        if (this.laserUnlockTimes[typeId] == null) {
+            this.laserUnlockTimes[typeId] = this.runTime
+        }
+
+    }
+
+    recordWeaponActiveTime(typeId, delta) {
+
+        const entry = this.weaponTelemetry?.[typeId]
+        if (!entry || !Number.isFinite(delta) || delta <= 0) return
+
+        entry.activeTime += delta
+
+    }
+
+    recordWeaponShot(typeId) {
+
+        const entry = this.weaponTelemetry?.[typeId]
+        if (!entry) return
+
+        entry.shots += 1
+
+    }
+
+    recordWeaponKill(typeId) {
+
+        const entry = this.weaponTelemetry?.[typeId]
+        if (!entry) return
+
+        entry.kills += 1
+
+    }
+
+    recordWeaponEquip(typeId) {
+
+        const entry = this.weaponTelemetry?.[typeId]
+        if (!entry) return
+
+        entry.equips += 1
+
+    }
+
+    getBossWeaponTelemetryEntry(typeId = this.bossWeaponType || this.currentLaserType || "simple") {
+
+        return this.bossWeaponTelemetry?.[typeId] || null
+
+    }
+
+    recordBossWeaponAttempt(typeId = this.bossWeaponType || this.currentLaserType || "simple") {
+
+        const entry = this.getBossWeaponTelemetryEntry(typeId)
+        if (!entry) return
+
+        entry.attempts += 1
+
+    }
+
+    recordBossWeaponShotResult(result, typeId = this.bossWeaponType || this.currentLaserType || "simple") {
+
+        const entry = this.getBossWeaponTelemetryEntry(typeId)
+        if (!entry) return
+
+        entry.fired += 1
+        if (result === "hit") {
+            entry.hit += 1
+            return
+        }
+        if (result === "graze") {
+            entry.graze += 1
+            return
+        }
+        entry.miss += 1
+
+    }
+
+    recordBossWeaponResult(result, typeId = this.bossWeaponType || this.currentLaserType || "simple") {
+
+        const entry = this.getBossWeaponTelemetryEntry(typeId)
+        if (!entry) return
+
+        if (result === "win") {
+            entry.wins += 1
+            return
+        }
+        if (result === "loss") {
+            entry.losses += 1
+        }
 
     }
 
@@ -542,6 +704,216 @@ export class Game {
         }
 
         return this.recentDamageDealt / this.recentDamageWindow
+
+    }
+
+    getBossShotAccuracy() {
+
+        const totalShots = this.bossShotsFired || 0
+        if (totalShots <= 0) {
+            return 0
+        }
+
+        return (this.bossShotsHit + (this.bossShotsGraze * 0.5)) / totalShots
+
+    }
+
+    getBossWeaponAccuracyByType(typeId) {
+
+        const entry = this.bossWeaponTelemetry?.[typeId]
+        if (!entry || entry.fired <= 0) {
+            return 0
+        }
+
+        return (entry.hit + (entry.graze * 0.5)) / entry.fired
+
+    }
+
+    getWeaponUsageLeader() {
+
+        const telemetryEntries = Object.entries(this.weaponTelemetry || {})
+        if (telemetryEntries.length === 0) {
+            return "--"
+        }
+
+        const [typeId, entry] = telemetryEntries.reduce((bestEntry, currentEntry) => {
+            if (!bestEntry) return currentEntry
+            return currentEntry[1].activeTime > bestEntry[1].activeTime ? currentEntry : bestEntry
+        }, null)
+
+        if (!entry || entry.activeTime <= 0) {
+            return "--"
+        }
+
+        const weaponLabel = LASER_TYPES[typeId]?.name || typeId
+        return weaponLabel + " " + this.formatBalanceOverlayTime(entry.activeTime)
+
+    }
+
+    getBossWeaponUsageSummary() {
+
+        const telemetryEntries = Object.entries(this.bossWeaponTelemetry || {})
+            .filter(([, entry]) => entry && entry.attempts > 0)
+
+        if (telemetryEntries.length === 0) {
+            return "--"
+        }
+
+        const [typeId, entry] = telemetryEntries.reduce((bestEntry, currentEntry) => {
+            if (!bestEntry) return currentEntry
+            return currentEntry[1].attempts > bestEntry[1].attempts ? currentEntry : bestEntry
+        }, null)
+        const weaponLabel = LASER_TYPES[typeId]?.name || typeId
+        const accuracy = this.getBossWeaponAccuracyByType(typeId)
+
+        return weaponLabel + " " + Math.round(accuracy * 100) + "% (" + entry.attempts + "A)"
+
+    }
+
+    getLatestRunSummary() {
+
+        if (!Array.isArray(this.recentRunSummaries) || this.recentRunSummaries.length === 0) {
+            return null
+        }
+
+        return this.recentRunSummaries[0]
+
+    }
+
+    formatRunSummaryPreview(summary) {
+
+        if (!summary) return "--"
+
+        const worldLabel = "W" + (summary.worldLevel ?? 1)
+        const outcome = summary.bossResult || summary.endReason || "--"
+        const duration = this.formatBalanceOverlayTime(summary.runDuration)
+        return worldLabel + " " + outcome + " " + duration
+
+    }
+
+    loadRecentRunSummaries() {
+
+        try {
+            const rawValue = localStorage.getItem(this.runSummaryStorageKey)
+            if (!rawValue) return []
+
+            const parsed = JSON.parse(rawValue)
+            return Array.isArray(parsed) ? parsed : []
+        } catch {
+            return []
+        }
+
+    }
+
+    buildRunSummary(endReason = "manual", overrides = {}) {
+
+        const bossAccuracy = this.getBossShotAccuracy()
+        const bossFailReason = typeof this.bossResult === "string" && this.bossResult.startsWith("fail:")
+            ? this.bossResult.slice(5).trim()
+            : null
+        const weaponUsage = {}
+        const bossWeaponUsage = {}
+
+        for (const [typeId, entry] of Object.entries(this.weaponTelemetry || {})) {
+            if (!entry) continue
+
+            if (entry.activeTime <= 0 && entry.shots <= 0 && entry.kills <= 0 && entry.equips <= 0) {
+                continue
+            }
+
+            weaponUsage[typeId] = {
+                activeTime: Number(entry.activeTime.toFixed(2)),
+                shots: entry.shots,
+                kills: entry.kills,
+                equips: entry.equips
+            }
+        }
+
+        for (const [typeId, entry] of Object.entries(this.bossWeaponTelemetry || {})) {
+            if (!entry) continue
+
+            if (entry.attempts <= 0 && entry.fired <= 0) {
+                continue
+            }
+
+            bossWeaponUsage[typeId] = {
+                attempts: entry.attempts,
+                wins: entry.wins,
+                losses: entry.losses,
+                fired: entry.fired,
+                hit: entry.hit,
+                graze: entry.graze,
+                miss: entry.miss,
+                accuracy: Number(this.getBossWeaponAccuracyByType(typeId).toFixed(3))
+            }
+        }
+
+        return {
+            timestamp: new Date().toISOString(),
+            endReason,
+            worldLevel: this.worldLevel,
+            runDuration: Number(this.runTime.toFixed(2)),
+            pointsEarned: Math.floor(this.runPointsEarned),
+            kills: this.runKills,
+            unlockTimes: {
+                simple: this.firstLaserUnlockTime,
+                autoFire: this.autoFireUnlockTime,
+                plasma: this.laserUnlockTimes?.plasma ?? null,
+                pulse: this.laserUnlockTimes?.pulse ?? null,
+                scatter: this.laserUnlockTimes?.scatter ?? null,
+                heavy: this.laserUnlockTimes?.heavy ?? null
+            },
+            transportReadyTime: this.transportReadyTime,
+            gateAffordableTime: this.worldGateAffordableTime,
+            gatePurchasedTime: this.worldGatePurchasedTime,
+            bossStartTime: this.bossStartTime,
+            bossAttempts: this.runBossAttempts,
+            bossWins: this.runBossWins,
+            bossLosses: this.runBossLosses,
+            bossResult: this.bossResult,
+            bossFailReason,
+            prepPurchaseCount: this.bossPrepPurchases,
+            prepSpend: Math.floor(this.bossPrepPointsSpent),
+            weaponUsage,
+            bossWeaponUsage,
+            bossShots: {
+                fired: this.bossShotsFired,
+                hit: this.bossShotsHit,
+                graze: this.bossShotsGraze,
+                miss: this.bossShotsMissed,
+                accuracy: Number(bossAccuracy.toFixed(3))
+            },
+            fragmentsEarned: this.runCoreFragmentsEarned,
+            currentWorldReached: this.worldLevel,
+            ...overrides
+        }
+
+    }
+
+    persistRunSummary(endReason = "manual", overrides = {}) {
+
+        const hasMeaningfulRunData =
+            this.runTime > 0 ||
+            this.runPointsEarned > 0 ||
+            this.runKills > 0 ||
+            this.runBossAttempts > 0
+
+        if (!hasMeaningfulRunData) {
+            return null
+        }
+
+        const summary = this.buildRunSummary(endReason, overrides)
+
+        try {
+            const storedSummaries = this.loadRecentRunSummaries()
+            storedSummaries.unshift(summary)
+            this.recentRunSummaries = storedSummaries.slice(0, 10)
+            localStorage.setItem(this.runSummaryStorageKey, JSON.stringify(this.recentRunSummaries))
+        } catch {
+            this.recentRunSummaries = [summary, ...(this.recentRunSummaries || [])].slice(0, 10)
+        }
+
+        return summary
 
     }
 
@@ -721,11 +1093,15 @@ export class Game {
         if (!this.hasLaser) return
         if (!LASER_TYPES[typeId]) return
         if (!this.isLaserUnlocked(typeId)) return
+        const isNewSelection = this.currentLaserType !== typeId
 
         this.currentLaserType = typeId
         this.fireInterval = 1 / this.laserFireRate
         this.lastAutoShotTime = -Infinity
         this.lastManualShotTime = -Infinity
+        if (isNewSelection) {
+            this.recordWeaponEquip(typeId)
+        }
 
     }
 
@@ -819,6 +1195,7 @@ export class Game {
         if (!this.economy.spend(cost)) return false
 
         this.plasmaUnlocked = true
+        this.recordLaserUnlock("plasma")
         return true
 
     }
@@ -832,6 +1209,7 @@ export class Game {
         if (!this.economy.spend(cost)) return false
 
         this.pulseUnlocked = true
+        this.recordLaserUnlock("pulse")
         return true
 
     }
@@ -845,6 +1223,7 @@ export class Game {
         if (!this.economy.spend(cost)) return false
 
         this.scatterUnlocked = true
+        this.recordLaserUnlock("scatter")
         return true
 
     }
@@ -858,6 +1237,7 @@ export class Game {
         if (!this.economy.spend(cost)) return false
 
         this.heavyUnlocked = true
+        this.recordLaserUnlock("heavy")
         return true
 
     }
@@ -1750,6 +2130,10 @@ export class Game {
         }
 
         if (clickedButton.id === "menu") {
+            this.persistRunSummary("menuExit", {
+                outcome: this.bossResult,
+                currentWorldReached: this.worldLevel
+            })
             this.showPauseMenu = false
             this.isPaused = false
             this.gameState = GAME_STATE_TITLE
@@ -2710,6 +3094,9 @@ export class Game {
             this.autoFireUnlocked = true
             this.autoFireEnabled = true
             this.lastAutoShotTime = -Infinity
+            if (this.autoFireUnlockTime == null) {
+                this.autoFireUnlockTime = this.runTime
+            }
             this.triggerUpgradeFlash(this.autoFireButton)
 
             this.floatingTexts.push(
@@ -2733,6 +3120,9 @@ export class Game {
             if (!this.economy.spend(worldGateCost)) return
 
             this.worldGatePurchased = true
+            if (this.worldGatePurchasedTime == null) {
+                this.worldGatePurchasedTime = this.runTime
+            }
             this.triggerUpgradeFlash(this.worldGatePurchaseButton)
 
             this.floatingTexts.push(
@@ -2751,6 +3141,8 @@ export class Game {
                 const shieldCost = this.getBossPrepCost(BOSS_PREP_SHIELD_COST)
                 if (!this.economy.spend(shieldCost)) return
                 this.bossPrepShield = true
+                this.bossPrepPurchases += 1
+                this.bossPrepPointsSpent += shieldCost
                 this.triggerUpgradeFlash(this.bossPrepShieldButton)
                 this.floatingTexts.push(
                     new FloatingText(
@@ -2767,6 +3159,8 @@ export class Game {
                 const overchargerCost = this.getBossPrepCost(BOSS_PREP_OVERCHARGER_COST)
                 if (!this.economy.spend(overchargerCost)) return
                 this.bossPrepOvercharger = true
+                this.bossPrepPurchases += 1
+                this.bossPrepPointsSpent += overchargerCost
                 this.triggerUpgradeFlash(this.bossPrepOverchargerButton)
                 this.floatingTexts.push(
                     new FloatingText(
@@ -2783,6 +3177,8 @@ export class Game {
                 const stabilizerCost = this.getBossPrepCost(BOSS_PREP_STABILIZER_COST)
                 if (!this.economy.spend(stabilizerCost)) return
                 this.bossPrepStabilizer = true
+                this.bossPrepPurchases += 1
+                this.bossPrepPointsSpent += stabilizerCost
                 this.triggerUpgradeFlash(this.bossPrepStabilizerButton)
                 this.floatingTexts.push(
                     new FloatingText(
@@ -2903,6 +3299,7 @@ export class Game {
         if (!this.hasLaser) return
         if (this.transportAnimating) return
         this.emitterRecoil = 6
+        this.recordWeaponShot(this.currentLaserType)
 
         const laserType = LASER_TYPES[this.currentLaserType]
         const colors = laserType.colors ?? [laserType.color ?? "#3a5cff"]
@@ -3305,6 +3702,361 @@ export class Game {
 
     }
 
+    createBossReactionState() {
+
+        return {
+            cooldown: 0,
+            flashTime: 0,
+            bannerTime: 0,
+            bannerText: "",
+            bannerColor: "#ffd7de",
+            mode: null,
+            modeTime: 0,
+            cleanHitStreak: 0,
+            categoryPressure: {
+                burst: 0,
+                coverage: 0,
+                sustain: 0,
+                phase: 0,
+                defense: 0
+            },
+            calibrationTrackingShots: 0,
+            calibrationAimBiasY: null,
+            stormRetaliationBursts: 0,
+            stormPressureTime: 0,
+            cryoShellStrength: 0,
+            cryoShellMaxStrength: 0,
+            cryoShellTime: 0,
+            cryoForcedLaneBursts: 0,
+            voidDistortionTime: 0,
+            voidMirrorBursts: 0,
+            voidPhantomBursts: 0
+        }
+
+    }
+
+    resetBossReactionState() {
+
+        this.bossReactionState = this.createBossReactionState()
+
+    }
+
+    resetBossReactionPressure() {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        reactionState.cleanHitStreak = 0
+
+        for (const key of Object.keys(reactionState.categoryPressure)) {
+            reactionState.categoryPressure[key] = 0
+        }
+
+    }
+
+    announceBossReaction(mode, label, color, duration = 3.2) {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        const bossX = this.canvas.width / 2
+        const bossY = this.canvas.height / 2
+
+        reactionState.mode = mode
+        reactionState.modeTime = duration
+        reactionState.flashTime = Math.max(reactionState.flashTime, 0.72)
+        reactionState.bannerTime = 1.35
+        reactionState.bannerText = label
+        reactionState.bannerColor = color
+
+        this.floatingTexts.push(
+            new FloatingText(
+                bossX,
+                bossY - 96,
+                label.toUpperCase(),
+                color
+            )
+        )
+
+    }
+
+    getBossMutationReactionCategories(profile, resultType = "hit") {
+
+        const categories = new Set()
+        const tags = Array.isArray(profile?.tags) ? profile.tags : []
+        const laneOffsets = Array.isArray(profile?.laneOffsets) ? profile.laneOffsets : null
+
+        if (laneOffsets && laneOffsets.length > 1) {
+            categories.add("coverage")
+        }
+
+        if (tags.includes("BURST") || tags.includes("SURGE") || tags.includes("COUNTER")) {
+            categories.add("burst")
+        }
+
+        if (
+            resultType === "hit" &&
+            (
+                profile?.isEcho ||
+                tags.includes("ECHO") ||
+                this.hasBossPhaseUpgrade("echoLattice") ||
+                this.hasBossPhaseUpgrade("resonanceFracture")
+            )
+        ) {
+            categories.add("sustain")
+        }
+
+        if (resultType === "graze" || tags.includes("LOCK")) {
+            categories.add("phase")
+        }
+
+        if (resultType === "playerHit" || tags.includes("COUNTER")) {
+            categories.add("defense")
+        }
+
+        return [...categories]
+
+    }
+
+    activateCalibrationBossReaction(context = {}) {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        const focusY = Number.isFinite(context.playerY)
+            ? context.playerY
+            : Number.isFinite(context.emitterY)
+                ? context.emitterY
+                : this.bossLaserY
+
+        reactionState.cooldown = 4.4
+        reactionState.calibrationTrackingShots = this.bossPhase >= 3 ? 3 : 2
+        reactionState.calibrationAimBiasY = Math.max(this.bossLaserMinY, Math.min(this.bossLaserMaxY, focusY))
+        this.announceBossReaction("trackingLock", "Tracking Lock", "#ffd5a3", 3.2)
+        this.resetBossReactionPressure()
+        this.bossAttackTimer = Math.min(this.bossAttackTimer, 0.42)
+
+    }
+
+    activateStormBossReaction() {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+
+        reactionState.cooldown = 3.7
+        reactionState.stormRetaliationBursts = Math.min(
+            3,
+            reactionState.stormRetaliationBursts + (this.bossPhase >= 3 ? 2 : 1)
+        )
+        reactionState.stormPressureTime = Math.max(reactionState.stormPressureTime, 3.6)
+        this.announceBossReaction("stormRetaliation", "Storm Retaliation", "#ff9de7", 3.6)
+        this.resetBossReactionPressure()
+        this.bossAttackTimer = Math.min(this.bossAttackTimer, 0.24)
+
+    }
+
+    activateCryoBossReaction(context = {}) {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        const shellStrength = 22 + (this.bossPhase * 8)
+        const laneY = Number.isFinite(context.playerY) ? context.playerY : this.bossLaserY
+
+        reactionState.cooldown = 4.8
+        reactionState.cryoShellMaxStrength = shellStrength
+        reactionState.cryoShellStrength = Math.max(reactionState.cryoShellStrength, shellStrength)
+        reactionState.cryoShellTime = 4.8
+        reactionState.cryoForcedLaneBursts = Math.min(2, reactionState.cryoForcedLaneBursts + 1)
+        this.spawnBossHazardLane("cryo", laneY + ((Math.random() - 0.5) * 68))
+        this.announceBossReaction("cryoShell", "Cryo Shell", "#9cecff", 4.8)
+        this.resetBossReactionPressure()
+
+    }
+
+    activateVoidBossReaction(context = {}) {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        const laneY = Number.isFinite(context.playerY) ? context.playerY : this.bossLaserY
+
+        reactionState.cooldown = 3.9
+        reactionState.voidDistortionTime = Math.max(reactionState.voidDistortionTime, 3.8)
+        reactionState.voidMirrorBursts = Math.min(2, reactionState.voidMirrorBursts + 1)
+        reactionState.voidPhantomBursts = Math.min(
+            3,
+            reactionState.voidPhantomBursts + (this.bossPhase >= 3 ? 2 : 1)
+        )
+        this.spawnBossHazardLane("void", laneY + ((Math.random() - 0.5) * 82))
+        this.announceBossReaction("voidDistortion", "Void Distortion", "#ff9ef4", 3.8)
+        this.resetBossReactionPressure()
+        this.bossAttackTimer = Math.min(this.bossAttackTimer, 0.28)
+
+    }
+
+    registerBossReactionEvent(eventType, categories = [], context = {}) {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        const attackStyle = (this.activeBossConfig?.attackStyle) || "calibration"
+        const pressure = reactionState.categoryPressure
+
+        if (eventType === "hit") {
+            reactionState.cleanHitStreak = Math.min(6, reactionState.cleanHitStreak + 1)
+        } else if (eventType === "graze") {
+            reactionState.cleanHitStreak = Math.min(4, reactionState.cleanHitStreak + 1)
+        } else {
+            reactionState.cleanHitStreak = 0
+        }
+
+        for (const category of categories) {
+            if (!(category in pressure)) continue
+            pressure[category] = Math.min(5, pressure[category] + 1)
+        }
+
+        if (reactionState.cooldown > 0) {
+            return
+        }
+
+        if (attackStyle === "storm") {
+            if ((pressure.burst + pressure.coverage) >= 2 || (pressure.burst + pressure.defense) >= 2) {
+                this.activateStormBossReaction()
+            }
+            return
+        }
+
+        if (attackStyle === "cryo") {
+            if (pressure.sustain >= 2 || pressure.burst >= 2 || (pressure.coverage >= 1 && pressure.sustain >= 1)) {
+                this.activateCryoBossReaction(context)
+            }
+            return
+        }
+
+        if (attackStyle === "void") {
+            if (
+                pressure.phase >= 2 ||
+                (pressure.phase >= 1 && (pressure.sustain >= 1 || pressure.coverage >= 1 || pressure.burst >= 1)) ||
+                (pressure.defense >= 1 && pressure.phase >= 1)
+            ) {
+                this.activateVoidBossReaction(context)
+            }
+            return
+        }
+
+        if (
+            (reactionState.cleanHitStreak >= 2 && (pressure.sustain >= 1 || pressure.burst >= 1)) ||
+            pressure.coverage >= 2 ||
+            pressure.phase >= 2
+        ) {
+            this.activateCalibrationBossReaction(context)
+        }
+
+    }
+
+    updateBossReactionState(delta) {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+
+        reactionState.cooldown = Math.max(0, reactionState.cooldown - delta)
+        reactionState.flashTime = Math.max(0, reactionState.flashTime - delta)
+        reactionState.bannerTime = Math.max(0, reactionState.bannerTime - delta)
+        reactionState.modeTime = Math.max(0, reactionState.modeTime - delta)
+
+        if (reactionState.modeTime <= 0) {
+            reactionState.mode = null
+        }
+
+        for (const key of Object.keys(reactionState.categoryPressure)) {
+            reactionState.categoryPressure[key] = Math.max(0, reactionState.categoryPressure[key] - (delta * 0.45))
+        }
+
+        reactionState.stormPressureTime = Math.max(0, reactionState.stormPressureTime - delta)
+        if (reactionState.stormPressureTime <= 0) {
+            reactionState.stormRetaliationBursts = 0
+        }
+
+        reactionState.cryoShellTime = Math.max(0, reactionState.cryoShellTime - delta)
+        if (reactionState.cryoShellTime <= 0 || reactionState.cryoShellStrength <= 0) {
+            reactionState.cryoShellTime = 0
+            reactionState.cryoShellStrength = 0
+            reactionState.cryoShellMaxStrength = 0
+            reactionState.cryoForcedLaneBursts = 0
+        }
+
+        reactionState.voidDistortionTime = Math.max(0, reactionState.voidDistortionTime - delta)
+        if (reactionState.voidDistortionTime <= 0) {
+            reactionState.voidMirrorBursts = 0
+            reactionState.voidPhantomBursts = 0
+        }
+
+        if (reactionState.calibrationTrackingShots <= 0 && reactionState.mode !== "trackingLock") {
+            reactionState.calibrationAimBiasY = null
+        }
+
+    }
+
+    applyBossReactionDamageResponse(rawDamage) {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        const attackStyle = (this.activeBossConfig?.attackStyle) || "calibration"
+
+        if (attackStyle !== "cryo" || reactionState.cryoShellTime <= 0 || reactionState.cryoShellStrength <= 0) {
+            return rawDamage
+        }
+
+        const absorbed = Math.min(
+            Math.max(0, rawDamage - 1),
+            Math.max(1, Math.round(rawDamage * 0.38))
+        )
+        const finalDamage = Math.max(1, rawDamage - absorbed)
+
+        reactionState.cryoShellStrength = Math.max(0, reactionState.cryoShellStrength - rawDamage)
+
+        this.floatingTexts.push(
+            new FloatingText(
+                (this.canvas.width / 2) + ((Math.random() - 0.5) * 28),
+                (this.canvas.height / 2) - 56 + ((Math.random() - 0.5) * 12),
+                "SHELL -" + absorbed,
+                "#9cecff"
+            )
+        )
+
+        if (reactionState.cryoShellStrength <= 0) {
+            reactionState.cryoShellTime = 0
+            reactionState.cryoShellMaxStrength = 0
+            reactionState.cryoForcedLaneBursts = 0
+            reactionState.mode = null
+            reactionState.modeTime = 0
+            reactionState.flashTime = Math.max(reactionState.flashTime, 0.45)
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    this.canvas.width / 2,
+                    (this.canvas.height / 2) - 78,
+                    "SHELL SHATTERED",
+                    "#dffbff"
+                )
+            )
+        }
+
+        return finalDamage
+
+    }
+
+    getBossReactionStatus() {
+
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+
+        if (reactionState.cryoShellTime > 0 && reactionState.cryoShellStrength > 0) {
+            const shellStrength = Math.max(0, Math.ceil(reactionState.cryoShellStrength))
+            return "Cryo Shell " + shellStrength
+        }
+
+        if (reactionState.stormPressureTime > 0) {
+            return "Storm Retaliation"
+        }
+
+        if (reactionState.voidDistortionTime > 0) {
+            return "Mirror Distortion"
+        }
+
+        if (reactionState.calibrationTrackingShots > 0) {
+            return "Tracking Lock"
+        }
+
+        return "Dormant"
+
+    }
+
     hasBossPhaseUpgrade(upgradeId) {
 
         return Boolean(this.bossPhaseUpgradeState?.activeIds?.has(upgradeId))
@@ -3545,16 +4297,35 @@ export class Game {
         const configuredCooldowns = Array.isArray(bossConfig.phaseAttackCooldowns)
             ? bossConfig.phaseAttackCooldowns
             : null
+        const reactionState = this.bossReactionState || this.createBossReactionState()
+        const attackStyle = (bossConfig && bossConfig.attackStyle) || "calibration"
+        let cooldown = 0
 
         if (configuredCooldowns && configuredCooldowns.length >= 3) {
-            if (this.bossPhase >= 3) return Math.max(0.2, configuredCooldowns[2] || 0.72)
-            if (this.bossPhase >= 2) return Math.max(0.25, configuredCooldowns[1] || 0.95)
-            return Math.max(0.3, configuredCooldowns[0] || 1.25)
+            if (this.bossPhase >= 3) {
+                cooldown = Math.max(0.2, configuredCooldowns[2] || 0.72)
+            } else if (this.bossPhase >= 2) {
+                cooldown = Math.max(0.25, configuredCooldowns[1] || 0.95)
+            } else {
+                cooldown = Math.max(0.3, configuredCooldowns[0] || 1.25)
+            }
+        } else if (this.bossPhase >= 3) {
+            cooldown = 0.72
+        } else if (this.bossPhase >= 2) {
+            cooldown = 0.95
+        } else {
+            cooldown = 1.25
         }
 
-        if (this.bossPhase >= 3) return 0.72
-        if (this.bossPhase >= 2) return 0.95
-        return 1.25
+        if (attackStyle === "storm" && reactionState.stormPressureTime > 0) {
+            cooldown *= 0.82
+        } else if (attackStyle === "void" && reactionState.voidDistortionTime > 0) {
+            cooldown *= 0.88
+        } else if (attackStyle === "calibration" && reactionState.calibrationTrackingShots > 0) {
+            cooldown *= 0.92
+        }
+
+        return Math.max(0.18, cooldown)
 
     }
 
@@ -3589,6 +4360,7 @@ export class Game {
 
         const bossConfig = this.activeBossConfig || this.getCurrentWorldBossConfig()
         const attackStyle = (bossConfig && bossConfig.attackStyle) || "calibration"
+        const reactionState = this.bossReactionState || this.createBossReactionState()
         const speedMultiplier = Number.isFinite(bossConfig.projectileSpeedMultiplier)
             ? bossConfig.projectileSpeedMultiplier
             : 1
@@ -3606,151 +4378,226 @@ export class Game {
             radius,
             speed,
             life = 4,
-            alpha = 1
+            alpha = 1,
+            radiusScale = 1,
+            speedScale = 1
         }) => {
             this.bossProjectiles.push({
                 x: spawnX,
                 y: clampY(y),
-                radius: radius * radiusMultiplier,
-                speed: speed * speedMultiplier,
+                radius: radius * radiusMultiplier * radiusScale,
+                speed: speed * speedMultiplier * speedScale,
                 life,
                 alpha
             })
         }
 
         if (attackStyle === "storm") {
-            const burstCount = this.bossPhase >= 3
+            const retaliationBurst = reactionState.stormRetaliationBursts > 0
+            const pressureActive = reactionState.stormPressureTime > 0
+            const burstCount = (this.bossPhase >= 3
                 ? (Math.random() < 0.62 ? 3 : 2)
                 : this.bossPhase >= 2
                     ? (Math.random() < 0.55 ? 2 : 1)
-                    : (Math.random() < 0.3 ? 2 : 1)
-            const spread = this.bossPhase >= 3 ? 130 : this.bossPhase >= 2 ? 100 : 78
+                    : (Math.random() < 0.3 ? 2 : 1)) + (retaliationBurst ? 1 : 0)
+            const spread = (this.bossPhase >= 3 ? 130 : this.bossPhase >= 2 ? 100 : 78) + (pressureActive ? 20 : 0)
+            const speedScale = pressureActive ? 1.14 : 1
 
             for (let i = 0; i < burstCount; i++) {
                 const targetY = playerY + ((Math.random() - 0.5) * spread)
                 pushProjectile({
                     y: targetY,
                     radius: 9 + (Math.random() * 4),
-                    speed: 360 + (Math.random() * 110)
+                    speed: 360 + (Math.random() * 110),
+                    speedScale
                 })
             }
 
-            if (Math.random() < (this.bossPhase >= 3 ? 0.4 : this.bossPhase >= 2 ? 0.26 : 0.12)) {
+            if (retaliationBurst) {
+                reactionState.stormRetaliationBursts = Math.max(0, reactionState.stormRetaliationBursts - 1)
+                return 0.14 + (Math.random() * 0.12)
+            }
+
+            if (Math.random() < (this.bossPhase >= 3 ? 0.4 : this.bossPhase >= 2 ? 0.26 : 0.12) + (pressureActive ? 0.12 : 0)) {
                 return 0.18 + (Math.random() * 0.16)
             }
             return
         }
 
         if (attackStyle === "cryo") {
-            const burstCount = this.bossPhase >= 3 ? 2 : 1
-            const spread = this.bossPhase >= 3 ? 90 : 64
+            const shellActive = reactionState.cryoShellTime > 0 && reactionState.cryoShellStrength > 0
+            const forcedLaneBurst = reactionState.cryoForcedLaneBursts > 0
+            const burstCount = shellActive && this.bossPhase >= 2 ? 2 : this.bossPhase >= 3 ? 2 : 1
+            const spread = shellActive ? (this.bossPhase >= 3 ? 72 : 54) : (this.bossPhase >= 3 ? 90 : 64)
             const baseY = playerY + ((Math.random() - 0.5) * spread)
 
             for (let i = 0; i < burstCount; i++) {
                 const offset = (i - ((burstCount - 1) / 2)) * (30 + (Math.random() * 16))
                 pushProjectile({
                     y: baseY + offset,
-                    radius: 13 + (Math.random() * 5),
-                    speed: 250 + (Math.random() * 70)
+                    radius: 13 + (Math.random() * 5) + (shellActive ? 2 : 0),
+                    speed: 250 + (Math.random() * 70),
+                    radiusScale: shellActive ? 1.08 : 1,
+                    speedScale: shellActive ? 0.94 : 1
                 })
             }
 
-            if (Math.random() < (this.bossPhase >= 2 ? 0.28 : 0.16)) {
+            if (forcedLaneBurst || Math.random() < (this.bossPhase >= 2 ? 0.28 : 0.16)) {
                 this.spawnBossHazardLane("cryo", baseY + ((Math.random() - 0.5) * 80))
+                if (forcedLaneBurst) {
+                    reactionState.cryoForcedLaneBursts = Math.max(0, reactionState.cryoForcedLaneBursts - 1)
+                }
             }
             return
         }
 
         if (attackStyle === "void") {
-            const mirroredBurst = Math.random() < (this.bossPhase >= 2 ? 0.5 : 0.28)
+            const forcedMirrorBurst = reactionState.voidMirrorBursts > 0
+            const distortionActive = reactionState.voidDistortionTime > 0
+            const phantomBurstReady = reactionState.voidPhantomBursts > 0
+            const mirroredBurst = forcedMirrorBurst || Math.random() < (this.bossPhase >= 2 ? 0.5 : 0.28)
             if (mirroredBurst) {
-                const offset = 34 + (Math.random() * (this.bossPhase >= 3 ? 66 : 46))
+                const offset = 34 + (Math.random() * (this.bossPhase >= 3 ? 66 : 46)) + (distortionActive ? 12 : 0)
                 pushProjectile({
                     y: playerY - offset,
                     radius: 10 + (Math.random() * 5),
-                    speed: 340 + (Math.random() * 120)
+                    speed: 340 + (Math.random() * 120),
+                    speedScale: distortionActive ? 1.08 : 1
                 })
                 pushProjectile({
                     y: playerY + offset,
                     radius: 10 + (Math.random() * 5),
-                    speed: 340 + (Math.random() * 120)
+                    speed: 340 + (Math.random() * 120),
+                    speedScale: distortionActive ? 1.08 : 1
                 })
-                if (this.bossPhase >= 3 && Math.random() < 0.55) {
+                if (forcedMirrorBurst) {
+                    reactionState.voidMirrorBursts = Math.max(0, reactionState.voidMirrorBursts - 1)
+                }
+                if (this.bossPhase >= 3 && (Math.random() < 0.55 || phantomBurstReady)) {
                     pushProjectile({
                         y: playerY + ((Math.random() - 0.5) * 30),
                         radius: 9 + (Math.random() * 4),
                         speed: 360 + (Math.random() * 120),
-                        alpha: 0.55
+                        alpha: phantomBurstReady ? 0.4 : 0.55,
+                        speedScale: distortionActive ? 1.08 : 1
                     })
                 }
             } else {
                 const burstCount = this.bossPhase >= 3 ? 3 : this.bossPhase >= 2 ? 2 : 1
-                const spread = this.bossPhase >= 3 ? 170 : this.bossPhase >= 2 ? 130 : 92
+                const spread = (this.bossPhase >= 3 ? 170 : this.bossPhase >= 2 ? 130 : 92) + (distortionActive ? 24 : 0)
                 for (let i = 0; i < burstCount; i++) {
                     pushProjectile({
                         y: playerY + ((Math.random() - 0.5) * spread),
                         radius: 10 + (Math.random() * 4),
                         speed: 330 + (Math.random() * 120),
-                        alpha: Math.random() < 0.25 ? 0.45 : 1
+                        alpha: Math.random() < 0.25 ? 0.45 : 1,
+                        speedScale: distortionActive ? 1.08 : 1
                     })
                 }
             }
 
-            if (Math.random() < (this.bossPhase >= 3 ? 0.45 : this.bossPhase >= 2 ? 0.3 : 0.16)) {
+            if (phantomBurstReady) {
+                pushProjectile({
+                    y: playerY + ((Math.random() - 0.5) * 52),
+                    radius: 9 + (Math.random() * 3),
+                    speed: 350 + (Math.random() * 110),
+                    alpha: 0.38,
+                    speedScale: distortionActive ? 1.08 : 1
+                })
+                reactionState.voidPhantomBursts = Math.max(0, reactionState.voidPhantomBursts - 1)
+            }
+
+            if (Math.random() < (this.bossPhase >= 3 ? 0.45 : this.bossPhase >= 2 ? 0.3 : 0.16) + (distortionActive ? 0.12 : 0)) {
                 this.spawnBossHazardLane("void", playerY + ((Math.random() - 0.5) * 130))
             }
-            if (Math.random() < (this.bossPhase >= 3 ? 0.44 : 0.24)) {
+            if (Math.random() < (this.bossPhase >= 3 ? 0.44 : 0.24) + (distortionActive ? 0.14 : 0)) {
                 return 0.16 + (Math.random() * 0.16)
             }
             return
         }
 
+        const trackingLock = reactionState.calibrationTrackingShots > 0
+        const trackingFocusY = trackingLock && Number.isFinite(reactionState.calibrationAimBiasY)
+            ? clampY((reactionState.calibrationAimBiasY * 0.72) + (playerY * 0.28))
+            : playerY
+
         if (this.bossPhase >= 3) {
-            const burstCount = Math.random() < 0.55 ? 3 : 2
-            const baseY = clampY(playerY + ((Math.random() - 0.5) * 70))
-            const spread = 34 + (Math.random() * 12)
+            const burstCount = trackingLock ? 3 : Math.random() < 0.55 ? 3 : 2
+            const baseY = clampY((trackingLock ? trackingFocusY : playerY) + ((Math.random() - 0.5) * (trackingLock ? 36 : 70)))
+            const spread = (trackingLock ? 24 : 34) + (Math.random() * (trackingLock ? 8 : 12))
 
             for (let i = 0; i < burstCount; i++) {
                 const offset = (i - ((burstCount - 1) / 2)) * spread
                 pushProjectile({
                     y: baseY + offset,
                     radius: 12 + (Math.random() * 4),
-                    speed: 340 + (Math.random() * 90)
+                    speed: 340 + (Math.random() * 90) + (trackingLock ? 24 : 0)
                 })
+            }
+            if (trackingLock) {
+                reactionState.calibrationTrackingShots = Math.max(0, reactionState.calibrationTrackingShots - 1)
+                if (reactionState.calibrationTrackingShots <= 0) {
+                    reactionState.calibrationAimBiasY = null
+                }
+                if (Math.random() < 0.4) {
+                    return 0.2 + (Math.random() * 0.12)
+                }
             }
             return
         }
 
         if (this.bossPhase >= 2) {
-            const baseY = clampY(playerY + ((Math.random() - 0.5) * 120))
+            const baseY = clampY((trackingLock ? trackingFocusY : playerY) + ((Math.random() - 0.5) * (trackingLock ? 58 : 120)))
             pushProjectile({
                 y: baseY,
                 radius: 10 + (Math.random() * 4),
-                speed: 310 + (Math.random() * 85)
+                speed: 310 + (Math.random() * 85) + (trackingLock ? 18 : 0)
             })
 
-            if (Math.random() < 0.35) {
-                const offset = (22 + (Math.random() * 20)) * (Math.random() < 0.5 ? -1 : 1)
+            if (Math.random() < (trackingLock ? 0.72 : 0.35)) {
+                const offset = (trackingLock ? 18 : 22 + (Math.random() * 20)) * (Math.random() < 0.5 ? -1 : 1)
                 pushProjectile({
                     y: baseY + offset,
                     radius: 10 + (Math.random() * 4),
-                    speed: 310 + (Math.random() * 85)
+                    speed: 310 + (Math.random() * 85) + (trackingLock ? 18 : 0)
                 })
+            }
+            if (trackingLock) {
+                reactionState.calibrationTrackingShots = Math.max(0, reactionState.calibrationTrackingShots - 1)
+                if (reactionState.calibrationTrackingShots <= 0) {
+                    reactionState.calibrationAimBiasY = null
+                }
+                if (Math.random() < 0.35) {
+                    return 0.24 + (Math.random() * 0.1)
+                }
             }
             return
         }
 
         pushProjectile({
-            y: minY + (Math.random() * (maxY - minY)),
+            y: trackingLock
+                ? clampY(trackingFocusY + ((Math.random() - 0.5) * 64))
+                : minY + (Math.random() * (maxY - minY)),
             radius: 10 + (Math.random() * 4),
-            speed: 280 + (Math.random() * 80)
+            speed: 280 + (Math.random() * 80) + (trackingLock ? 18 : 0)
         })
+
+        if (trackingLock) {
+            reactionState.calibrationTrackingShots = Math.max(0, reactionState.calibrationTrackingShots - 1)
+            if (reactionState.calibrationTrackingShots <= 0) {
+                reactionState.calibrationAimBiasY = null
+            }
+        }
 
     }
 
     startBossFight() {
 
         this.runBossAttempts += 1
+        if (this.bossStartTime == null) {
+            this.bossStartTime = this.runTime
+        }
+        this.bossResult = "active"
         this.gameState = GAME_STATE_BOSS
         this.bossFightActive = true
         this.pendingWorldLevel = this.worldLevel + 1
@@ -3764,6 +4611,7 @@ export class Game {
         this.bossFightTimer = this.bossFightTimeLimit
         this.configureBossWeaponFromCurrentLaser()
         this.configureBossBeamVisualFromCurrentLaser()
+        this.recordBossWeaponAttempt(this.bossWeaponType)
         this.bossBeamVisualPhase = 0
         if (this.bossPrepOvercharger) {
             this.bossWeaponDamage = Math.max(1, Math.round(this.bossWeaponDamage * 1.25))
@@ -3776,10 +4624,10 @@ export class Game {
         this.bossLaserCooldownTimer = 0
         this.bossShotFlashTime = 0
         this.resetBossPhaseUpgradeState()
+        this.resetBossReactionState()
         this.bossProjectiles = []
         this.bossHazardLanes = []
         this.bossHazardTimer = 0
-        this.bossAttackTimer = this.getBossPhaseAttackCooldown()
         this.bossPlayerHits = 0
         this.bossMaxPlayerHits = 3 + (this.hasProgressNode("emergencyPlating") ? 1 : 0)
         this.bossHitFlashTime = 0
@@ -3795,6 +4643,7 @@ export class Game {
         this.targets = []
         this.lasers = []
         this.pulseShockwaves = []
+        this.bossAttackTimer = this.getBossPhaseAttackCooldown()
 
         this.floatingTexts.push(
             new FloatingText(
@@ -3807,14 +4656,16 @@ export class Game {
 
     }
 
-    applyBossPlayerHit(label = "HIT", color = "#ff8c8c") {
+    applyBossPlayerHit(label = "HIT", color = "#ff8c8c", failureReason = "projectile") {
 
         const playerX = 70
         const playerY = this.bossLaserY
+        const reactionCategories = []
 
         if (this.bossPrepShield) {
             this.bossPrepShield = false
             this.bossHitFlashTime = 0.16
+            reactionCategories.push("defense")
 
             this.floatingTexts.push(
                 new FloatingText(
@@ -3824,6 +4675,7 @@ export class Game {
                     "#9bf3ff"
                 )
             )
+            this.registerBossReactionEvent("playerHit", reactionCategories, { playerY })
             return false
         }
 
@@ -3841,6 +4693,7 @@ export class Game {
 
         if (this.hasBossPhaseUpgrade("counterphaseGuard")) {
             this.bossPhaseUpgradeState.counterphaseReady = true
+            reactionCategories.push("defense")
             this.floatingTexts.push(
                 new FloatingText(
                     playerX + 56,
@@ -3851,8 +4704,10 @@ export class Game {
             )
         }
 
+        this.registerBossReactionEvent("playerHit", reactionCategories, { playerY })
+
         if (this.bossPlayerHits >= this.bossMaxPlayerHits) {
-            this.failBossFight()
+            this.failBossFight(failureReason)
             return true
         }
 
@@ -3905,6 +4760,8 @@ export class Game {
         if (this.bossPhaseChoiceActive) {
             return
         }
+
+        this.updateBossReactionState(delta)
 
         const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
         upgradeState.fractureTimer = Math.max(0, upgradeState.fractureTimer - delta)
@@ -3969,7 +4826,7 @@ export class Game {
 
                 const laneLabel = lane.style === "cryo" ? "FROST" : "RIFT"
                 const laneColor = lane.style === "cryo" ? "#8be8ff" : "#ff92ff"
-                if (this.applyBossPlayerHit(laneLabel, laneColor)) {
+                if (this.applyBossPlayerHit(laneLabel, laneColor, "hazard")) {
                     return
                 }
             }
@@ -4001,14 +4858,14 @@ export class Game {
             const hitDistance = projectile.radius + playerRadius
             if ((dx * dx) + (dy * dy) <= (hitDistance * hitDistance)) {
                 this.bossProjectiles.splice(i, 1)
-                if (this.applyBossPlayerHit("HIT", "#ff8c8c")) {
+                if (this.applyBossPlayerHit("HIT", "#ff8c8c", "projectile")) {
                     return
                 }
             }
         }
 
         if (this.bossFightTimer <= 0) {
-            this.failBossFight()
+            this.failBossFight("timeout")
         }
 
     }
@@ -4043,6 +4900,7 @@ export class Game {
         this.bossPhaseBuffCooldownMultiplier = 1
         this.bossPhaseBuffExtraLives = 0
         this.resetBossPhaseUpgradeState()
+        this.resetBossReactionState()
 
         if (clearPrep) {
             this.bossPrepShield = false
@@ -4057,6 +4915,8 @@ export class Game {
         this.bossFightActive = false
         this.gameState = GAME_STATE_PLAYING
         this.runBossWins += 1
+        this.bossResult = "win"
+        this.recordBossWeaponResult("win", this.bossWeaponType)
         const fragmentReward = this.getBossFragmentReward()
         this.coreFragments += fragmentReward
         this.runCoreFragmentsEarned += fragmentReward
@@ -4075,11 +4935,13 @@ export class Game {
 
     }
 
-    failBossFight() {
+    failBossFight(reason = "timeout") {
 
         this.bossFightActive = false
         this.gameState = GAME_STATE_PLAYING
         this.runBossLosses += 1
+        this.bossResult = "fail: " + reason
+        this.recordBossWeaponResult("loss", this.bossWeaponType)
         const transportChargeRetained = this.hasProgressNode("resonanceBuffer") ? 0.65 : 0.5
         this.transportCharge = Math.floor(this.transportCharge * transportChargeRetained)
         this.transportReady = this.transportCharge >= this.transportChargeRequired
@@ -4155,6 +5017,7 @@ export class Game {
             this.lastAutoShotTime = -Infinity
             this.lastManualShotTime = -Infinity
             this.fireInterval = 1 / this.laserFireRate
+            this.recordWeaponEquip("simple")
             return
         }
 
@@ -4164,6 +5027,7 @@ export class Game {
             this.lastAutoShotTime = -Infinity
             this.lastManualShotTime = -Infinity
             this.fireInterval = 1 / this.laserFireRate
+            this.recordWeaponEquip("pulse")
             return
         }
 
@@ -4173,12 +5037,18 @@ export class Game {
             this.lastAutoShotTime = -Infinity
             this.lastManualShotTime = -Infinity
             this.fireInterval = 1 / this.laserFireRate
+            this.recordWeaponEquip("plasma")
         }
 
     }
 
     advanceWorld() {
 
+        this.persistRunSummary("worldAdvance", {
+            outcome: "advance",
+            nextWorldLevel: this.worldLevel + 1,
+            currentWorldReached: this.worldLevel + 1
+        })
         this.worldLevel += 1
         this.worldPointMultiplier *= WORLD_POINT_MULTIPLIER_GROWTH
         this.resetProgression()
@@ -4532,6 +5402,18 @@ export class Game {
             )
         }
 
+        if (this.bossHealth > 0) {
+            this.registerBossReactionEvent(
+                "hit",
+                this.getBossMutationReactionCategories(profile, "hit"),
+                {
+                    emitterY: profile.emitterY,
+                    playerY: this.bossLaserY,
+                    damage
+                }
+            )
+        }
+
         if (this.bossHealth <= 0) {
             this.winBossFight()
         }
@@ -4559,10 +5441,15 @@ export class Game {
         }
 
         if (hit) {
-            const damage = Math.max(
+            const rawDamage = Math.max(
                 1,
                 Math.round((profile.baseDamage * profile.damageMultiplier) + profile.damageFlat)
             )
+            const damage = this.applyBossReactionDamageResponse(rawDamage)
+            if (!profile.isEcho) {
+                this.bossShotsHit += 1
+                this.recordBossWeaponShotResult("hit")
+            }
             this.bossHealth = Math.max(0, this.bossHealth - damage)
             this.recordDamageDealt(damage)
 
@@ -4584,6 +5471,10 @@ export class Game {
                 1,
                 Math.round((profile.baseDamage * 0.3) + Math.max(0, profile.damageFlat * 0.5))
             )
+            if (!profile.isEcho) {
+                this.bossShotsGraze += 1
+                this.recordBossWeaponShotResult("graze")
+            }
 
             this.bossHealth = Math.max(0, this.bossHealth - grazeDamage)
             this.recordDamageDealt(grazeDamage)
@@ -4606,6 +5497,18 @@ export class Game {
                 )
             )
 
+            if (this.bossHealth > 0) {
+                this.registerBossReactionEvent(
+                    "graze",
+                    this.getBossMutationReactionCategories(profile, "graze"),
+                    {
+                        emitterY: profile.emitterY,
+                        playerY: this.bossLaserY,
+                        damage: grazeDamage
+                    }
+                )
+            }
+
             if (this.bossHealth <= 0) {
                 this.winBossFight()
             }
@@ -4617,6 +5520,14 @@ export class Game {
             if (this.bossPhaseUpgradeState.fractureStacks <= 0) {
                 this.bossPhaseUpgradeState.fractureTimer = 0
             }
+        }
+
+        if (this.bossReactionState) {
+            this.bossReactionState.cleanHitStreak = 0
+        }
+        if (!profile.isEcho) {
+            this.bossShotsMissed += 1
+            this.recordBossWeaponShotResult("miss")
         }
 
         this.floatingTexts.push(
@@ -4675,6 +5586,7 @@ export class Game {
             (this.bossWeaponCooldownBase || this.bossLaserCooldown || 0.18) * profile.cooldownMultiplier
         )
 
+        this.bossShotsFired += 1
         this.bossLaserCooldown = effectiveCooldown
         this.bossLaserCooldownTimer = effectiveCooldown
         this.bossShotFlashTime = 0.08
@@ -4835,6 +5747,10 @@ export class Game {
             }
 
             return
+        }
+
+        if (this.hasLaser) {
+            this.recordWeaponActiveTime(this.currentLaserType, scaledDelta)
         }
 
         this.laserOvercharge = Math.max(
@@ -5013,6 +5929,22 @@ export class Game {
         const bossDamageBonus = this.hasProgressNode("coreBreaker") ? 10 : 0
         const prepDiscount = this.hasProgressNode("prepLogistics") ? 10 : 0
         const dpsEstimate = this.getRecentDpsEstimate()
+        const readyToAffordTime =
+            Number.isFinite(this.transportReadyTime) && Number.isFinite(this.worldGateAffordableTime)
+                ? Math.max(0, this.worldGateAffordableTime - this.transportReadyTime)
+                : null
+        const affordToPurchaseTime =
+            Number.isFinite(this.worldGateAffordableTime) && Number.isFinite(this.worldGatePurchasedTime)
+                ? Math.max(0, this.worldGatePurchasedTime - this.worldGateAffordableTime)
+                : null
+        const purchaseToBossTime =
+            Number.isFinite(this.worldGatePurchasedTime) && Number.isFinite(this.bossStartTime)
+                ? Math.max(0, this.bossStartTime - this.worldGatePurchasedTime)
+                : null
+        const bossAccuracy = this.getBossShotAccuracy()
+        const weaponLeader = this.getWeaponUsageLeader()
+        const bossWeaponSummary = this.getBossWeaponUsageSummary()
+        const latestSummary = this.getLatestRunSummary()
         const bossCooldown = this.bossFightActive
             ? Math.max(
                 0.04,
@@ -5020,27 +5952,57 @@ export class Game {
             )
             : (this.bossWeaponCooldownBase || 0.18)
         const lines = [
-            "BALANCE OVERLAY",
-            "Run Time: " + this.formatBalanceOverlayTime(this.runTime),
-            "Points Earned: " + Math.floor(this.runPointsEarned),
-            "Kills: " + this.runKills,
-            "Recent DPS: " + dpsEstimate.toFixed(1),
-            "First Laser: " + this.formatBalanceOverlayTime(this.firstLaserUnlockTime),
-            "Transport Ready: " + this.formatBalanceOverlayTime(this.transportReadyTime),
-            "Gate Affordable: " + this.formatBalanceOverlayTime(this.worldGateAffordableTime),
-            "Gate Cost: " + gateCost,
-            "Boss Attempts: " + this.runBossAttempts,
-            "Boss Wins: " + this.runBossWins,
-            "Boss Losses: " + this.runBossLosses,
-            "Prep Total Cost: " + prepTotalCost,
-            "Boss Weapon Damage: " + Math.max(1, Math.round(this.bossWeaponDamage || this.laserStrength || 1)),
-            "Boss Weapon Cooldown: " + bossCooldown.toFixed(3) + "s",
-            "Fragments Earned: " + this.runCoreFragmentsEarned,
-            "Core Fragments Total: " + Math.floor(this.coreFragments),
-            "Matrix Transport Eff: +" + transportEfficiency + "%",
-            "Matrix Gate Reduction: -" + gateReduction + "%",
-            "Matrix Boss Damage: +" + bossDamageBonus + "%",
-            "Matrix Prep Discount: -" + prepDiscount + "%"
+            { text: "BALANCE OVERLAY", kind: "title" },
+            { text: "RUN", kind: "section" },
+            { text: "Run Time: " + this.formatBalanceOverlayTime(this.runTime), kind: "body" },
+            { text: "Points Earned: " + Math.floor(this.runPointsEarned), kind: "body" },
+            { text: "Kills: " + this.runKills, kind: "body" },
+            { text: "Recent DPS: " + dpsEstimate.toFixed(1), kind: "body" },
+            { text: "WEAPON FLOW", kind: "section" },
+            { text: "First Laser: " + this.formatBalanceOverlayTime(this.firstLaserUnlockTime), kind: "body" },
+            { text: "Auto Fire: " + this.formatBalanceOverlayTime(this.autoFireUnlockTime), kind: "body" },
+            { text: "Plasma: " + this.formatBalanceOverlayTime(this.laserUnlockTimes?.plasma), kind: "body" },
+            { text: "Pulse: " + this.formatBalanceOverlayTime(this.laserUnlockTimes?.pulse), kind: "body" },
+            { text: "Scatter: " + this.formatBalanceOverlayTime(this.laserUnlockTimes?.scatter), kind: "body" },
+            { text: "Heavy: " + this.formatBalanceOverlayTime(this.laserUnlockTimes?.heavy), kind: "body" },
+            { text: "Usage Lead: " + weaponLeader, kind: "body" },
+            { text: "GATE LOOP", kind: "section" },
+            { text: "Transport Ready: " + this.formatBalanceOverlayTime(this.transportReadyTime), kind: "body" },
+            { text: "Gate Affordable: " + this.formatBalanceOverlayTime(this.worldGateAffordableTime), kind: "body" },
+            { text: "Gate Purchased: " + this.formatBalanceOverlayTime(this.worldGatePurchasedTime), kind: "body" },
+            { text: "Boss Start: " + this.formatBalanceOverlayTime(this.bossStartTime), kind: "body" },
+            { text: "Ready->Afford: " + this.formatBalanceOverlayTime(readyToAffordTime), kind: "body" },
+            { text: "Afford->Buy: " + this.formatBalanceOverlayTime(affordToPurchaseTime), kind: "body" },
+            { text: "Buy->Boss: " + this.formatBalanceOverlayTime(purchaseToBossTime), kind: "body" },
+            { text: "Gate Cost: " + gateCost, kind: "body" },
+            { text: "Prep Total Cost: " + prepTotalCost, kind: "body" },
+            { text: "Prep Bought: " + this.bossPrepPurchases + " (" + Math.floor(this.bossPrepPointsSpent) + " pts)", kind: "body" },
+            { text: "BOSS", kind: "section" },
+            { text: "Boss Attempts: " + this.runBossAttempts, kind: "body" },
+            { text: "Boss Wins: " + this.runBossWins, kind: "body" },
+            { text: "Boss Losses: " + this.runBossLosses, kind: "body" },
+            { text: "Boss Result: " + this.bossResult, kind: "body" },
+            {
+                text: "Boss Aim: " +
+                    Math.round(bossAccuracy * 100) + "% (" +
+                    this.bossShotsHit + "H/" +
+                    this.bossShotsGraze + "G/" +
+                    this.bossShotsMissed + "M)",
+                kind: "body"
+            },
+            { text: "Boss Weapon Lead: " + bossWeaponSummary, kind: "body" },
+            { text: "Boss Weapon Damage: " + Math.max(1, Math.round(this.bossWeaponDamage || this.laserStrength || 1)), kind: "body" },
+            { text: "Boss Weapon Cooldown: " + bossCooldown.toFixed(3) + "s", kind: "body" },
+            { text: "META", kind: "section" },
+            { text: "Fragments Earned: " + this.runCoreFragmentsEarned, kind: "body" },
+            { text: "Core Fragments Total: " + Math.floor(this.coreFragments), kind: "body" },
+            { text: "Matrix Transport Eff: +" + transportEfficiency + "%", kind: "body" },
+            { text: "Matrix Gate Reduction: -" + gateReduction + "%", kind: "body" },
+            { text: "Matrix Boss Damage: +" + bossDamageBonus + "%", kind: "body" },
+            { text: "Matrix Prep Discount: -" + prepDiscount + "%", kind: "body" },
+            { text: "RECENT RUNS", kind: "section" },
+            { text: "Stored Runs: " + this.recentRunSummaries.length, kind: "body" },
+            { text: "Last Run: " + this.formatRunSummaryPreview(latestSummary), kind: "body" }
         ]
         const panelHeight = 16 + (lines.length * lineHeight) + 12
 
@@ -5058,8 +6020,15 @@ export class Game {
         ctx.font = "12px monospace"
 
         for (let i = 0; i < lines.length; i++) {
-            ctx.fillStyle = i === 0 ? "#9dd6ff" : "rgba(228,240,255,0.92)"
-            ctx.fillText(lines[i], panelX + 12, panelY + 10 + (i * lineHeight))
+            const line = lines[i]
+            if (line.kind === "title") {
+                ctx.fillStyle = "#9dd6ff"
+            } else if (line.kind === "section") {
+                ctx.fillStyle = "#7de6cf"
+            } else {
+                ctx.fillStyle = "rgba(228,240,255,0.92)"
+            }
+            ctx.fillText(line.text, panelX + 12, panelY + 10 + (i * lineHeight))
         }
 
         ctx.restore()
@@ -5083,6 +6052,7 @@ export class Game {
         const phase = this.bossPhase || 1
         const phaseTime = performance.now() * 0.001
         const phasePulse = 0.5 + Math.sin(phaseTime * (phase >= 3 ? 6.2 : phase >= 2 ? 4.8 : 3.6)) * 0.5
+        const reactionState = this.bossReactionState || this.createBossReactionState()
 
         const phaseVisuals = {
             coreColor: bossConfig.bossCoreColor || "#8f1d34",
@@ -5195,6 +6165,83 @@ export class Game {
                 ctx.beginPath()
                 ctx.arc(centerX, centerY, shellRadius + 24, 0, Math.PI * 2)
                 ctx.stroke()
+            }
+
+            ctx.restore()
+        }
+
+        if (
+            reactionState.stormPressureTime > 0 ||
+            reactionState.cryoShellTime > 0 ||
+            reactionState.voidDistortionTime > 0 ||
+            reactionState.calibrationTrackingShots > 0 ||
+            reactionState.flashTime > 0
+        ) {
+            ctx.save()
+
+            if (reactionState.stormPressureTime > 0) {
+                const stormPulse = 0.38 + Math.sin(phaseTime * 11.5) * 0.18
+                ctx.globalAlpha = 0.18 + stormPulse
+                ctx.strokeStyle = "#ff9be7"
+                ctx.lineWidth = 3.2
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, shellRadius + 28 + (stormPulse * 16), 0, Math.PI * 2)
+                ctx.stroke()
+            }
+
+            if (reactionState.cryoShellTime > 0 && reactionState.cryoShellStrength > 0) {
+                const shellRatio = reactionState.cryoShellMaxStrength > 0
+                    ? Math.max(0, Math.min(1, reactionState.cryoShellStrength / reactionState.cryoShellMaxStrength))
+                    : 0
+                ctx.globalAlpha = 0.18 + (shellRatio * 0.2)
+                ctx.fillStyle = "rgba(156,236,255,0.14)"
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, shellRadius + 18, 0, Math.PI * 2)
+                ctx.fill()
+
+                ctx.globalAlpha = 0.5 + (shellRatio * 0.22)
+                ctx.strokeStyle = "#9cecff"
+                ctx.lineWidth = 3
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, shellRadius + 18, 0, Math.PI * 2)
+                ctx.stroke()
+            }
+
+            if (reactionState.voidDistortionTime > 0) {
+                const distortionPulse = 0.46 + Math.sin(phaseTime * 9.5) * 0.24
+                ctx.globalAlpha = 0.18 + distortionPulse
+                ctx.strokeStyle = "#ff9ef4"
+                ctx.lineWidth = 2.4
+                ctx.beginPath()
+                ctx.arc(centerX - 8, centerY + 6, shellRadius + 22 + (distortionPulse * 12), 0, Math.PI * 2)
+                ctx.stroke()
+                ctx.beginPath()
+                ctx.arc(centerX + 10, centerY - 4, shellRadius + 12 + (distortionPulse * 9), 0, Math.PI * 2)
+                ctx.stroke()
+            }
+
+            if (reactionState.calibrationTrackingShots > 0 && Number.isFinite(reactionState.calibrationAimBiasY)) {
+                ctx.globalAlpha = 0.34 + (reactionState.flashTime * 0.2)
+                ctx.strokeStyle = "#ffd6a8"
+                ctx.lineWidth = 1.8
+                ctx.setLineDash([10, 8])
+                ctx.beginPath()
+                ctx.moveTo(centerX - (shellRadius + 20), centerY)
+                ctx.lineTo(118, reactionState.calibrationAimBiasY)
+                ctx.stroke()
+                ctx.setLineDash([])
+
+                ctx.beginPath()
+                ctx.arc(110, reactionState.calibrationAimBiasY, 12, 0, Math.PI * 2)
+                ctx.stroke()
+            }
+
+            if (reactionState.flashTime > 0 && reactionState.bannerColor) {
+                ctx.globalAlpha = Math.min(0.28, reactionState.flashTime * 0.35)
+                ctx.fillStyle = reactionState.bannerColor
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, shellRadius + 42, 0, Math.PI * 2)
+                ctx.fill()
             }
 
             ctx.restore()
@@ -5354,6 +6401,16 @@ export class Game {
         ctx.font = "bold 15px Arial"
         ctx.fillText(this.getWorldBossSubtitle(), centerX, 68)
 
+        if (reactionState.bannerTime > 0 && reactionState.bannerText) {
+            ctx.fillStyle = reactionState.bannerColor || "#ffd7de"
+            ctx.font = "bold 14px Arial"
+            ctx.fillText(
+                reactionState.bannerText.toUpperCase(),
+                centerX,
+                centerY - 112
+            )
+        }
+
         ctx.fillStyle = "rgba(255,255,255,0.9)"
         ctx.font = "bold 16px Arial"
         ctx.fillText(
@@ -5407,6 +6464,12 @@ export class Game {
             centerX,
             barY + barHeight + 154
         )
+        ctx.fillStyle = "rgba(255,222,188,0.9)"
+        ctx.fillText(
+            "Reaction: " + this.getBossReactionStatus(),
+            centerX,
+            barY + barHeight + 172
+        )
 
         const activeMutationTitles = this.getActiveBossPhaseUpgradeTitles()
         if (activeMutationTitles.length > 0) {
@@ -5414,7 +6477,7 @@ export class Game {
             ctx.fillText(
                 "Mutations: " + activeMutationTitles.join(", "),
                 centerX,
-                barY + barHeight + 172
+                barY + barHeight + 190
             )
         }
 

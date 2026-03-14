@@ -23,7 +23,9 @@ Core progression has two axes:
 5. Laser collisions destroy targets and award points.
 6. Player buys laser upgrades and target-economy upgrades.
 7. Player unlocks auto-fire and continues scaling output.
-8. Player unlocks/switches to stronger laser tiers (currently Plasma).
+8. Player unlocks/switches to stronger laser tiers across the waveform arsenal.
+9. Player fills transport charge, buys the world gate, optionally buys boss prep, and enters the world boss fight.
+10. Boss wins grant Core Fragments for the Progress Matrix.
 
 ## How to Run
 
@@ -41,6 +43,11 @@ Open <http://localhost:8000>.
 ### Option B
 
 Open `index.html` directly in a modern browser.
+
+## Developer Telemetry
+
+- Press `F8` to toggle the balance overlay during title, gameplay, or boss states.
+- Recent per-run summaries are stored in browser local storage under `frequencyLaserClickerRunSummaries`.
 
 ## Gameplay Systems
 
@@ -108,6 +115,13 @@ World behavior is authored through `src/worldSystem.js` on top of `WORLD_DATA` i
   - counterphase retaliation
 
 These are temporary boss-fight rewrites and reset after the fight ends.
+
+### Boss Reaction Layer
+- World bosses now react to mutation categories instead of only absorbing them passively.
+- Calibration bosses answer sustained clean pressure with tighter tracking.
+- Storm bosses answer burst and coverage builds with retaliation spikes.
+- Cryo bosses answer sustained fracture pressure with defensive shell refreshes and lane denial.
+- Void bosses answer phase/graze style builds with mirrored distortion and phantom pressure.
 
 ### Manual Firing
 - Triggered by grid click when not clicking a target.
