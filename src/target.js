@@ -166,6 +166,10 @@ export class Target {
             }
         }
 
+        if (this.game?.worldSystem && typeof this.game.worldSystem.updateTarget === "function") {
+            this.game.worldSystem.updateTarget(this, delta)
+        }
+
         if (this.direction < 0 && this.x + this.radius < this.gridLeftBoundary) {
             this.shouldRemove = true
         }
@@ -489,6 +493,46 @@ export class Target {
             ctx.lineWidth = 2.5
             ctx.beginPath()
             ctx.arc(this.x, this.y, radius + 7, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+        }
+
+        if (this.worldStormVisual > 0.04) {
+            ctx.save()
+            ctx.globalAlpha = Math.min(0.45, this.worldStormVisual * 0.55)
+            ctx.strokeStyle = "#ff8cff"
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.arc(this.x, this.y, radius + 6, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+        }
+
+        if (this.cryoShellActive) {
+            ctx.save()
+            ctx.globalAlpha = 0.55
+            ctx.strokeStyle = "#bfeeff"
+            ctx.lineWidth = 2.5
+            ctx.beginPath()
+            ctx.arc(this.x, this.y, radius + 6, 0, Math.PI * 2)
+            ctx.stroke()
+
+            ctx.globalAlpha = 0.28
+            ctx.strokeStyle = "#6fdcff"
+            ctx.lineWidth = 1.5
+            ctx.beginPath()
+            ctx.arc(this.x, this.y, radius + 10, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+        }
+
+        if (this.isVoidAttuned) {
+            ctx.save()
+            ctx.globalAlpha = this.isVoidExposed ? 0.6 : 0.18
+            ctx.strokeStyle = this.isVoidExposed ? "#ff9ef4" : "#bf8eff"
+            ctx.lineWidth = this.isVoidExposed ? 2.5 : 1.6
+            ctx.beginPath()
+            ctx.arc(this.x, this.y, radius + (this.isVoidExposed ? 7 : 5), 0, Math.PI * 2)
             ctx.stroke()
             ctx.restore()
         }

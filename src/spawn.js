@@ -160,6 +160,19 @@ export class SpawnSystem {
 
     getSpawnY(radius) {
 
+        if (this.game.worldSystem && typeof this.game.worldSystem.getSpawnY === "function") {
+            return this.game.worldSystem.getSpawnY(
+                radius,
+                (fallbackRadius) => this.getDefaultSpawnY(fallbackRadius)
+            )
+        }
+
+        return this.getDefaultSpawnY(radius)
+
+    }
+
+    getDefaultSpawnY(radius) {
+
         const canvas = this.game.canvas
         const centerY = canvas.height / 2
         const middleBandHalfHeight = this.game.laserAmplitude * 1.4
@@ -207,6 +220,9 @@ export class SpawnSystem {
 
             target.x = Math.max(minX, Math.min(maxX, anchorX + offsetX))
             target.y = Math.max(minY, Math.min(maxY, anchorY + offsetY))
+            if (this.game.worldSystem && typeof this.game.worldSystem.applySpawnModifiers === "function") {
+                this.game.worldSystem.applySpawnModifiers(target)
+            }
 
             this.game.targets.push(target)
 
@@ -338,7 +354,19 @@ export class SpawnSystem {
         }
 
         if (!type) {
-            const availableTypes = weightedTypes.filter(entry => entry.unlocked).map(entry => ({ ...entry }))
+            const availableTypes = weightedTypes
+                .filter(entry => entry.unlocked)
+                .map(entry => {
+                    const worldWeightMultiplier = this.game.worldSystem &&
+                        typeof this.game.worldSystem.getTargetWeightMultiplier === "function"
+                        ? this.game.worldSystem.getTargetWeightMultiplier(entry.type)
+                        : 1
+
+                    return {
+                        ...entry,
+                        chance: entry.chance * worldWeightMultiplier
+                    }
+                })
 
             if (basicAllowed) {
                 const nonBasicTotalWeight = availableTypes.reduce((sum, entry) => sum + entry.chance, 0)
@@ -521,6 +549,9 @@ export class SpawnSystem {
 
         target.y = this.getSpawnY(target.radius)
         target.x = this.getSpawnX(direction, target.radius)
+        if (this.game.worldSystem && typeof this.game.worldSystem.applySpawnModifiers === "function") {
+            this.game.worldSystem.applySpawnModifiers(target)
+        }
 
         this.game.targets.push(target)
 

@@ -115,6 +115,51 @@ Cost model:
 - Spawn uses interval catch-up for smooth pacing.
 - `MAX_ACTIVE_TARGETS` caps concurrent targets for stability.
 
+## World Identity
+
+Worlds are no longer only target-pool swaps. Each world now applies an authored combat rule set.
+
+- Neon Grid
+  - Stable reference world
+  - Centered, readable traffic
+  - Best for learning beam spacing and baseline waveform behavior
+- Plasma Storm
+  - Adds storm drift to normal targets
+  - Emphasizes volatile enemy mixes and unstable trajectories
+  - Makes amplitude and dense waveform coverage more valuable
+- Cryo Circuit
+  - Uses fixed lattice lanes
+  - Fortified targets can spawn with cryo shells that blunt weak hits
+  - Makes strength and heavy fire more valuable
+- Void Pulse
+  - Special targets cycle through resonance windows
+  - Non-exposed targets resist damage unless the player uses dense waveforms or pulse timing well
+  - Makes frequency and pulse weapon timing more valuable
+
+These authored world rules are implemented in `src/worldSystem.js` and surfaced through the WORLD panel.
+
+## Boss Phase Mutations
+
+Boss fights still pause at phase thresholds, but the choices are now temporary waveform mutations instead of mostly flat stat buffs.
+
+Current mutation behaviors include:
+- Burst Capacitor
+  - every 4th shot becomes a larger burst beam
+- Echo Lattice
+  - successful hits schedule a delayed echo beam
+- Prism Splitter
+  - shots gain side-band lanes and wider coverage
+- Resonance Fracture
+  - consecutive hits stack damage-amplifying cracks on the boss core
+- Surge Feedback
+  - repeated hits arm surge shots with stronger output and faster cadence
+- Phase Anchor
+  - near misses graze the core and expose it for follow-up fire
+- Counterphase Guard
+  - taking a hit arms the next shot into a counter-surge
+
+These mutations are temporary to the current boss fight and are intended to change how the player fights immediately.
+
 ## Automation and Fire-Rate Coupling
 
 - Fire-rate upgrades are panel-gated until auto-fire unlock.

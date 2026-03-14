@@ -25,6 +25,7 @@
 - `constants.js`: all balance/config constants
 - `economy.js`: explicit point reward/spend system
 - `overlayController.js`: overlay/menu state and routing
+- `worldSystem.js`: authored world behavior hooks and world combat identity
 - `ui.js`: placeholder (currently unused)
 
 ## Coding Conventions
@@ -37,15 +38,24 @@
 - Keep grid and panel coordinate spaces explicit.
 - Do not hide economy rules in property setters; use `EconomySystem.award()` and `EconomySystem.spend()`.
 - Route overlay input through `OverlayController` instead of open-coded booleans in `game.js`.
+- Route persistent world behavior through `WorldSystem` instead of scattering `if (world === X)` across gameplay files.
 
 ## Guidelines for Adding New Systems
 
 ## Adding a New Target Type
 1. Add constants in `constants.js` (chance/value/health/radius).
-2. Extend spawn selection in `spawn.js`.
-3. Add visuals/feedback in `target.js`.
-4. Confirm collision behavior in `collision.js`.
-5. Update docs.
+2. Decide whether the target needs world-specific weighting or authored world hooks in `worldSystem.js`.
+3. Extend spawn selection in `spawn.js`.
+4. Add visuals/feedback in `target.js`.
+5. Confirm collision behavior in `collision.js`.
+6. Update docs.
+
+## Adding or Changing a World Rule
+1. Extend `WORLD_DATA` in `constants.js` with readable field summaries and signal hints.
+2. Put authored mechanical behavior in `worldSystem.js`.
+3. Keep spawn hooks in `spawn.js`, per-target visuals in `target.js`, and damage math hooks in `collision.js`.
+4. Surface the rule in the WORLD panel so the player can read it.
+5. Validate that the rule changes gameplay questions instead of just adding noise.
 
 ## Adding a New Upgrade
 1. Choose owner:
@@ -56,6 +66,16 @@
 4. If it is a core waveform stat, decide whether it belongs in the shared oscillator layer instead of weapon-specific mastery.
 5. Wire button + click behavior in `game.js`.
 6. Verify scaling and affordability feedback.
+
+## Adding or Changing a Boss Phase Mutation
+1. Keep it temporary to the boss runtime.
+2. Add it to the boss phase mutation registry in `game.js`.
+3. Prefer effect hooks in the boss shot profile / hit-resolution helpers instead of one-off conditionals.
+4. Make sure it has visible combat feedback:
+   - beam flash
+   - HUD status
+   - floating text
+5. Ensure the mutation changes how the player fights, not just the numbers underneath.
 
 ## Adding a New Laser Type
 1. Add entry in `laserTypes.js` with base stats/colors/multipliers.

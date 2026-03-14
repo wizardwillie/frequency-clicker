@@ -83,6 +83,32 @@ Current tiers:
 
 Each type keeps its own derived stat container in `game.laserTypeStats`, but core oscillator progression is now shared across lasers while mastery stays weapon-specific.
 
+### World Identity
+- World 1: Neon Grid
+  - Stable reference world with centered, readable lanes
+- World 2: Plasma Storm
+  - Adds storm drift and volatile target mixes that reward wide coverage
+- World 3: Cryo Circuit
+  - Uses frozen lane formations and cryo shells that reward strength and heavy fire
+- World 4: Void Pulse
+  - Introduces resonance windows where dense waveforms and pulse timing matter more
+
+World behavior is authored through `src/worldSystem.js` on top of `WORLD_DATA` in `src/constants.js`.
+
+### Boss Phase Mutations
+- Boss fights pause at phase thresholds and offer one temporary signal mutation.
+- Phase choices now emphasize combat verbs instead of flat stat buffs.
+- Current mutations include:
+  - burst shots
+  - delayed echo beams
+  - side-band prism lanes
+  - resonance fracture stacks
+  - surge-armed shots
+  - phase-anchor grazes
+  - counterphase retaliation
+
+These are temporary boss-fight rewrites and reset after the fight ends.
+
 ### Manual Firing
 - Triggered by grid click when not clicking a target.
 - Uses a manual cooldown (`BASE_MANUAL_FIRE_COOLDOWN`) scaled by current laser fire-rate progression.
@@ -173,6 +199,7 @@ Major modules in `src/`:
 - `constants.js`: gameplay and balance constants
 - `economy.js`: explicit point spending/reward API and point bindings
 - `overlayController.js`: overlay state, click routing, wheel routing, cursor routing
+- `worldSystem.js`: authored world behavior hooks, world combat identity, world field rendering
 - `ui.js`: placeholder (unused)
 
 For deeper docs:

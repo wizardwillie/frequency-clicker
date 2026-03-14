@@ -9,6 +9,7 @@ import { TargetUpgradeSystem } from "./targetUpgrades.js"
 import { ClickUpgradeSystem } from "./clickUpgrades.js"
 import { EconomySystem } from "./economy.js"
 import { OverlayController } from "./overlayController.js"
+import { WorldSystem } from "./worldSystem.js"
 import { LASER_TYPES } from "./laserTypes.js"
 import { SaveSystem } from "./saveSystem.js"
 import {
@@ -132,6 +133,7 @@ export class Game {
         this.bossBeamVisualScatterCount = 1
         this.bossBeamVisualColorPrimary = "#3a86ff"
         this.bossBeamVisualColorSecondary = "#d9f6ff"
+        this.bossBeamFlashEvents = []
         this.bossProjectiles = []
         this.bossAttackTimer = 0
         this.bossAttackCooldown = 1.25
@@ -149,6 +151,7 @@ export class Game {
         this.bossPhaseBuffHitWindow = 0
         this.bossPhaseBuffCooldownMultiplier = 1
         this.bossPhaseBuffExtraLives = 0
+        this.bossPhaseUpgradeState = this.createBossPhaseUpgradeState()
         this.activeWorldModifiers = []
         this.gravityWells = []
         this.gravityWellTimer = 0
@@ -398,6 +401,7 @@ export class Game {
         this.panelHeaderButtons = []
         this.panelContentHeight = this.canvas.height
 
+        this.worldSystem = new WorldSystem(this)
         this.spawnSystem = new SpawnSystem(this)
         this.collisionSystem = new CollisionSystem(this)
         this.particleSystem = new ParticleSystem(this)
@@ -879,6 +883,10 @@ export class Game {
     }
 
     getCurrentWorldConfig() {
+
+        if (this.worldSystem && typeof this.worldSystem.getConfig === "function") {
+            return this.worldSystem.getConfig()
+        }
 
         const exactConfig = WORLD_DATA[this.worldLevel]
         if (exactConfig) return exactConfig
@@ -3176,25 +3184,32 @@ export class Game {
 
     }
 
-    drawBossFightBeam(ctx, emitterX, emitterY, beamStartX, beamEndX, flashRatio) {
+    drawBossFightBeam(ctx, emitterX, emitterY, beamStartX, beamEndX, flashRatio, options = {}) {
 
         const weaponType = this.bossWeaponType || "simple"
-        const beamWidth = Math.max(1.4, this.bossBeamVisualWidth || 3)
-        const beamGlow = Math.max(1, this.bossBeamVisualGlow || 1)
+        const beamWidth = Math.max(1.4, (this.bossBeamVisualWidth || 3) * (options.widthMultiplier || 1))
+        const beamGlow = Math.max(1, (this.bossBeamVisualGlow || 1) * (options.glowMultiplier || 1))
         const waveAmplitude = this.bossBeamVisualAmplitude || 0
         const waveFrequency = this.bossBeamVisualFrequency || 0.014
         const beamPhase = this.bossBeamVisualPhase || 0
-        const primaryColor = this.bossBeamVisualColorPrimary || this.bossWeaponColor || "#3a86ff"
-        const secondaryColor = this.bossBeamVisualColorSecondary || "#d9f6ff"
-        const laneCount = weaponType === "scatter"
-            ? Math.max(1, Math.floor(this.bossBeamVisualScatterCount || 1))
-            : 1
-        const laneSpacing = weaponType === "scatter" ? 4.5 : 0
+        const primaryColor = options.primaryColor || this.bossBeamVisualColorPrimary || this.bossWeaponColor || "#3a86ff"
+        const secondaryColor = options.secondaryColor || this.bossBeamVisualColorSecondary || "#d9f6ff"
+        const explicitLaneOffsets = Array.isArray(options.laneOffsets) && options.laneOffsets.length > 0
+            ? options.laneOffsets
+            : null
+        const laneCount = explicitLaneOffsets
+            ? explicitLaneOffsets.length
+            : weaponType === "scatter"
+                ? Math.max(1, Math.floor(this.bossBeamVisualScatterCount || 1))
+                : 1
+        const laneSpacing = explicitLaneOffsets ? 0 : weaponType === "scatter" ? 4.5 : 0
         const segmentCount = 28
 
         const drawLanePath = (laneIndex) => {
             const laneCenter = laneIndex - ((laneCount - 1) / 2)
-            const laneOffset = laneCenter * laneSpacing
+            const laneOffset = explicitLaneOffsets
+                ? explicitLaneOffsets[laneIndex] || 0
+                : laneCenter * laneSpacing
 
             ctx.beginPath()
             for (let segment = 0; segment <= segmentCount; segment++) {
@@ -3267,46 +3282,154 @@ export class Game {
 
     }
 
-    generateBossPhaseChoices() {
+    createBossPhaseUpgradeState() {
 
-        const choicePool = [
+        return {
+            activeIds: new Set(),
+            shotCounter: 0,
+            fractureStacks: 0,
+            fractureTimer: 0,
+            surgeCharge: 0,
+            surgeReady: false,
+            anchorLockTime: 0,
+            counterphaseReady: false,
+            pendingEchoShots: []
+        }
+
+    }
+
+    resetBossPhaseUpgradeState() {
+
+        this.bossPhaseUpgradeState = this.createBossPhaseUpgradeState()
+        this.bossBeamFlashEvents = []
+
+    }
+
+    hasBossPhaseUpgrade(upgradeId) {
+
+        return Boolean(this.bossPhaseUpgradeState?.activeIds?.has(upgradeId))
+
+    }
+
+    getBossPhaseUpgradePool() {
+
+        return [
             {
-                id: "damageBoost",
-                title: "Damage Boost",
-                description: "+25% boss weapon damage"
+                id: "burstCapacitor",
+                title: "Burst Capacitor",
+                description: "Every 4th shot becomes a high-energy burst beam.",
+                iconId: "fireRate",
+                impactIds: ["heavy", "plasma"]
             },
             {
-                id: "rapidCapacitor",
-                title: "Rapid Capacitor",
-                description: "Faster firing in boss fight"
+                id: "echoLattice",
+                title: "Echo Lattice",
+                description: "Hits schedule a delayed echo beam for follow-up damage.",
+                iconId: "frequency",
+                impactIds: ["pulse", "heavy"]
             },
             {
-                id: "stabilizedAim",
-                title: "Stabilized Aim",
-                description: "Wider boss hit window"
+                id: "prismSplitter",
+                title: "Prism Splitter",
+                description: "Shots project side-band lanes that widen your coverage.",
+                iconId: "amplitude",
+                impactIds: ["scatter", "plasma"]
             },
             {
-                id: "reinforcedShielding",
-                title: "Reinforced Shielding",
-                description: "+1 max hit before defeat"
+                id: "resonanceFracture",
+                title: "Resonance Fracture",
+                description: "Consecutive hits crack the core and ramp your damage.",
+                iconId: "strength",
+                impactIds: ["heavy", "simple"]
             },
             {
-                id: "phaseBurst",
-                title: "Phase Burst",
-                description: "Flat bonus boss damage"
+                id: "surgeFeedback",
+                title: "Surge Feedback",
+                description: "Successful hits arm periodic surge shots with extra force.",
+                iconId: "fireRate",
+                impactIds: ["plasma", "pulse"]
+            },
+            {
+                id: "phaseAnchor",
+                title: "Phase Anchor",
+                description: "Near misses graze the core and expose it to follow-up fire.",
+                iconId: "frequency",
+                impactIds: ["pulse", "simple"]
+            },
+            {
+                id: "counterphaseGuard",
+                title: "Counterphase Guard",
+                description: "Taking a hit charges your next shot into a counter-surge.",
+                iconId: "targetValue",
+                impactIds: ["heavy", "scatter"]
             }
         ]
 
+    }
+
+    getBossPhaseChoiceWeight(choice) {
+
+        if (!choice) return 0
+
+        let weight = 1
+        const weaponType = this.bossWeaponType || this.currentLaserType || "simple"
+        const bossStyle = (this.activeBossConfig?.attackStyle) || "calibration"
+
+        if (Array.isArray(choice.impactIds) && choice.impactIds.includes(weaponType)) {
+            weight += 0.8
+        }
+
+        if (choice.id === "phaseAnchor" && bossStyle === "void") {
+            weight += 0.7
+        }
+        if (choice.id === "prismSplitter" && bossStyle === "storm") {
+            weight += 0.6
+        }
+        if (choice.id === "resonanceFracture" && bossStyle === "cryo") {
+            weight += 0.65
+        }
+        if (choice.id === "surgeFeedback" && bossStyle === "storm") {
+            weight += 0.45
+        }
+        if (choice.id === "counterphaseGuard" && this.bossPhase >= 2) {
+            weight += 0.3
+        }
+
+        return weight
+
+    }
+
+    pickWeightedBossPhaseChoice(pool) {
+
+        const totalWeight = pool.reduce((sum, choice) => sum + Math.max(0.05, this.getBossPhaseChoiceWeight(choice)), 0)
+        if (totalWeight <= 0) {
+            return pool.splice(Math.floor(Math.random() * pool.length), 1)[0]
+        }
+
+        let roll = Math.random() * totalWeight
+        for (let i = 0; i < pool.length; i++) {
+            roll -= Math.max(0.05, this.getBossPhaseChoiceWeight(pool[i]))
+            if (roll <= 0) {
+                return pool.splice(i, 1)[0]
+            }
+        }
+
+        return pool.pop()
+
+    }
+
+    generateBossPhaseChoices() {
+
+        const choicePool = this.getBossPhaseUpgradePool()
         const pool = [...choicePool]
         this.bossPhaseChoices = []
 
         for (let i = 0; i < 3 && pool.length > 0; i++) {
-            const index = Math.floor(Math.random() * pool.length)
-            this.bossPhaseChoices.push(pool.splice(index, 1)[0])
+            this.bossPhaseChoices.push(this.pickWeightedBossPhaseChoice(pool))
         }
 
         if (this.hasProgressNode("phaseAnalysis")) {
-            const highImpactIds = ["damageBoost", "rapidCapacitor", "phaseBurst"]
+            const highImpactIds = ["echoLattice", "prismSplitter", "surgeFeedback", "phaseAnchor"]
             const hasHighImpactChoice = this.bossPhaseChoices.some(choice => highImpactIds.includes(choice.id))
 
             if (!hasHighImpactChoice) {
@@ -3325,17 +3448,21 @@ export class Game {
 
     applyBossPhaseChoice(choiceId) {
 
-        if (choiceId === "damageBoost") {
-            this.bossPhaseBuffDamage += 0.25
-        } else if (choiceId === "rapidCapacitor") {
-            this.bossPhaseBuffCooldownMultiplier *= 0.82
-        } else if (choiceId === "stabilizedAim") {
-            this.bossPhaseBuffHitWindow += 14
-        } else if (choiceId === "reinforcedShielding") {
-            this.bossPhaseBuffExtraLives += 1
-            this.bossMaxPlayerHits += 1
-        } else if (choiceId === "phaseBurst") {
-            this.bossPhaseBuffDamage += 0.15
+        if (!choiceId) return
+
+        const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
+        upgradeState.activeIds.add(choiceId)
+
+        if (choiceId === "resonanceFracture") {
+            upgradeState.fractureStacks = 0
+            upgradeState.fractureTimer = 0
+        } else if (choiceId === "surgeFeedback") {
+            upgradeState.surgeCharge = 0
+            upgradeState.surgeReady = false
+        } else if (choiceId === "phaseAnchor") {
+            upgradeState.anchorLockTime = 0
+        } else if (choiceId === "counterphaseGuard") {
+            upgradeState.counterphaseReady = false
         }
 
         this.bossAttackTimer = this.getBossPhaseAttackCooldown()
@@ -3371,6 +3498,44 @@ export class Game {
             width: cardWidth,
             height: cardHeight
         }))
+
+    }
+
+    getActiveBossPhaseUpgradeTitles() {
+
+        const activeIds = this.bossPhaseUpgradeState?.activeIds
+        if (!(activeIds instanceof Set) || activeIds.size === 0) {
+            return []
+        }
+
+        const pool = this.getBossPhaseUpgradePool()
+        return [...activeIds]
+            .map(id => pool.find(choice => choice.id === id)?.title)
+            .filter(Boolean)
+
+    }
+
+    getBossPhaseSignalStatus() {
+
+        const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
+        const parts = []
+
+        if (upgradeState.fractureStacks > 0) {
+            parts.push("Fracture x" + upgradeState.fractureStacks)
+        }
+        if (upgradeState.surgeReady) {
+            parts.push("Surge Armed")
+        } else if (upgradeState.surgeCharge > 0) {
+            parts.push("Surge " + upgradeState.surgeCharge + "/3")
+        }
+        if (upgradeState.anchorLockTime > 0) {
+            parts.push("Core Lock")
+        }
+        if (upgradeState.counterphaseReady) {
+            parts.push("Counter Armed")
+        }
+
+        return parts.length > 0 ? parts.join(" | ") : "Stable"
 
     }
 
@@ -3610,6 +3775,7 @@ export class Game {
         this.bossLaserCooldown = this.bossWeaponCooldownBase
         this.bossLaserCooldownTimer = 0
         this.bossShotFlashTime = 0
+        this.resetBossPhaseUpgradeState()
         this.bossProjectiles = []
         this.bossHazardLanes = []
         this.bossHazardTimer = 0
@@ -3673,6 +3839,18 @@ export class Game {
             )
         )
 
+        if (this.hasBossPhaseUpgrade("counterphaseGuard")) {
+            this.bossPhaseUpgradeState.counterphaseReady = true
+            this.floatingTexts.push(
+                new FloatingText(
+                    playerX + 56,
+                    playerY - 20,
+                    "COUNTER ARMED",
+                    "#ffb8d6"
+                )
+            )
+        }
+
         if (this.bossPlayerHits >= this.bossMaxPlayerHits) {
             this.failBossFight()
             return true
@@ -3703,6 +3881,7 @@ export class Game {
 
         this.bossShotFlashTime = Math.max(0, this.bossShotFlashTime - delta)
         this.bossHitFlashTime = Math.max(0, this.bossHitFlashTime - delta)
+        this.updateBossBeamFlashEvents(delta)
         this.bossLaserY = Math.max(
             this.bossLaserMinY,
             Math.min(this.bossLaserMaxY, this.mouseY)
@@ -3727,11 +3906,29 @@ export class Game {
             return
         }
 
+        const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
+        upgradeState.fractureTimer = Math.max(0, upgradeState.fractureTimer - delta)
+        if (upgradeState.fractureTimer <= 0) {
+            upgradeState.fractureStacks = 0
+        }
+        upgradeState.anchorLockTime = Math.max(0, upgradeState.anchorLockTime - delta)
+
+        for (const echoShot of upgradeState.pendingEchoShots) {
+            echoShot.timer -= delta
+        }
+        this.firePendingBossEchoShots()
+        if (!this.bossFightActive) {
+            return
+        }
+
         this.bossFightTimer = Math.max(0, this.bossFightTimer - delta)
         this.bossLaserCooldownTimer = Math.max(0, this.bossLaserCooldownTimer - delta)
 
         if (this.autoFireUnlocked && this.autoFireEnabled && !this.bossPhaseChoiceActive) {
             this.tryFireBossWeapon()
+            if (!this.bossFightActive) {
+                return
+            }
         }
 
         const playerY = this.bossLaserY
@@ -3816,14 +4013,10 @@ export class Game {
 
     }
 
-    winBossFight() {
+    resetBossCombatState(options = {}) {
 
-        this.bossFightActive = false
-        this.gameState = GAME_STATE_PLAYING
-        this.runBossWins += 1
-        const fragmentReward = this.getBossFragmentReward()
-        this.coreFragments += fragmentReward
-        this.runCoreFragmentsEarned += fragmentReward
+        const clearPrep = options.clearPrep !== false
+
         this.pendingWorldLevel = null
         this.bossTargetWorld = null
         this.activeBossConfig = null
@@ -3832,6 +4025,7 @@ export class Game {
         this.bossFightTimer = 0
         this.bossLaserCooldownTimer = 0
         this.bossShotFlashTime = 0
+        this.bossBeamVisualPhase = 0
         this.bossProjectiles = []
         this.bossHazardLanes = []
         this.bossHazardTimer = 0
@@ -3848,9 +4042,25 @@ export class Game {
         this.bossPhaseBuffHitWindow = 0
         this.bossPhaseBuffCooldownMultiplier = 1
         this.bossPhaseBuffExtraLives = 0
-        this.bossPrepShield = false
-        this.bossPrepOvercharger = false
-        this.bossPrepStabilizer = false
+        this.resetBossPhaseUpgradeState()
+
+        if (clearPrep) {
+            this.bossPrepShield = false
+            this.bossPrepOvercharger = false
+            this.bossPrepStabilizer = false
+        }
+
+    }
+
+    winBossFight() {
+
+        this.bossFightActive = false
+        this.gameState = GAME_STATE_PLAYING
+        this.runBossWins += 1
+        const fragmentReward = this.getBossFragmentReward()
+        this.coreFragments += fragmentReward
+        this.runCoreFragmentsEarned += fragmentReward
+        this.resetBossCombatState({ clearPrep: true })
 
         this.advanceWorld()
 
@@ -3874,33 +4084,7 @@ export class Game {
         this.transportCharge = Math.floor(this.transportCharge * transportChargeRetained)
         this.transportReady = this.transportCharge >= this.transportChargeRequired
         this.worldGatePurchased = false
-        this.pendingWorldLevel = null
-        this.bossTargetWorld = null
-        this.activeBossConfig = null
-        this.bossHealth = 0
-        this.bossMaxHealth = 0
-        this.bossFightTimer = 0
-        this.bossLaserCooldownTimer = 0
-        this.bossShotFlashTime = 0
-        this.bossProjectiles = []
-        this.bossHazardLanes = []
-        this.bossHazardTimer = 0
-        this.bossAttackTimer = 0
-        this.bossPlayerHits = 0
-        this.bossMaxPlayerHits = 3
-        this.bossHitFlashTime = 0
-        this.bossPhase = 1
-        this.bossPhaseChoiceActive = false
-        this.bossPhaseTwoChoiceGiven = false
-        this.bossPhaseThreeChoiceGiven = false
-        this.bossPhaseChoices = []
-        this.bossPhaseBuffDamage = 0
-        this.bossPhaseBuffHitWindow = 0
-        this.bossPhaseBuffCooldownMultiplier = 1
-        this.bossPhaseBuffExtraLives = 0
-        this.bossPrepShield = false
-        this.bossPrepOvercharger = false
-        this.bossPrepStabilizer = false
+        this.resetBossCombatState({ clearPrep: true })
         this.transportAnimating = false
         this.transportAnimationTime = 0
 
@@ -3951,29 +4135,8 @@ export class Game {
         this.bossPrepShield = false
         this.bossPrepOvercharger = false
         this.bossPrepStabilizer = false
-        this.pendingWorldLevel = null
-        this.bossTargetWorld = null
-        this.activeBossConfig = null
         this.bossFightActive = false
-        this.bossHealth = 0
-        this.bossMaxHealth = 0
-        this.bossFightTimer = 0
-        this.bossProjectiles = []
-        this.bossHazardLanes = []
-        this.bossHazardTimer = 0
-        this.bossAttackTimer = 0
-        this.bossPlayerHits = 0
-        this.bossMaxPlayerHits = 3
-        this.bossHitFlashTime = 0
-        this.bossPhase = 1
-        this.bossPhaseChoiceActive = false
-        this.bossPhaseTwoChoiceGiven = false
-        this.bossPhaseThreeChoiceGiven = false
-        this.bossPhaseChoices = []
-        this.bossPhaseBuffDamage = 0
-        this.bossPhaseBuffHitWindow = 0
-        this.bossPhaseBuffCooldownMultiplier = 1
-        this.bossPhaseBuffExtraLives = 0
+        this.resetBossCombatState({ clearPrep: true })
         this.targets = []
         this.lasers = []
         this.floatingTexts = []
@@ -4151,29 +4314,255 @@ export class Game {
         }
     }
 
-    tryFireBossWeapon() {
+    queueBossBeamFlash(options = {}) {
 
-        if (!this.bossFightActive) return false
-        if (this.transportAnimating) return false
-        if (this.bossPhaseChoiceActive) return false
-        if (this.bossLaserCooldownTimer > 0) return false
+        const duration = Number.isFinite(options.duration) ? options.duration : 0.08
 
-        const effectiveCooldown = Math.max(
-            0.04,
-            (this.bossWeaponCooldownBase || this.bossLaserCooldown || 0.18) * this.bossPhaseBuffCooldownMultiplier
-        )
-        this.bossLaserCooldown = effectiveCooldown
-        this.bossLaserCooldownTimer = effectiveCooldown
-        this.bossShotFlashTime = 0.08
+        this.bossBeamFlashEvents.push({
+            y: Number.isFinite(options.y) ? options.y : this.bossLaserY,
+            laneOffsets: Array.isArray(options.laneOffsets) ? [...options.laneOffsets] : null,
+            widthMultiplier: Number.isFinite(options.widthMultiplier) ? options.widthMultiplier : 1,
+            glowMultiplier: Number.isFinite(options.glowMultiplier) ? options.glowMultiplier : 1,
+            primaryColor: options.primaryColor || null,
+            secondaryColor: options.secondaryColor || null,
+            life: duration,
+            maxLife: duration
+        })
+
+    }
+
+    updateBossBeamFlashEvents(delta) {
+
+        if (!Array.isArray(this.bossBeamFlashEvents)) {
+            this.bossBeamFlashEvents = []
+            return
+        }
+
+        for (let i = this.bossBeamFlashEvents.length - 1; i >= 0; i--) {
+            const event = this.bossBeamFlashEvents[i]
+            event.life -= delta
+
+            if (event.life <= 0) {
+                this.bossBeamFlashEvents.splice(i, 1)
+            }
+        }
+
+    }
+
+    getBossPrismLaneOffsets(isEcho = false) {
+
+        if (this.bossWeaponType === "scatter") {
+            return isEcho
+                ? [-18, -6, 6, 18]
+                : [-24, -10, 0, 10, 24]
+        }
+
+        if (this.bossWeaponType === "heavy") {
+            return isEcho ? [-12, 0, 12] : [-16, 0, 16]
+        }
+
+        if (this.bossWeaponType === "pulse") {
+            return isEcho ? [-16, 0, 16] : [-20, 0, 20]
+        }
+
+        return isEcho ? [-14, 0, 14] : [-18, 0, 18]
+
+    }
+
+    getBossEchoDamageMultiplier() {
+
+        if (this.bossWeaponType === "pulse") return 0.55
+        if (this.bossWeaponType === "heavy") return 0.5
+        if (this.bossWeaponType === "plasma") return 0.48
+        if (this.bossWeaponType === "scatter") return 0.42
+        return 0.45
+
+    }
+
+    createBossShotProfile(options = {}) {
+
+        const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
+        const isEcho = Boolean(options.isEcho)
+        const emitterY = Number.isFinite(options.emitterY) ? options.emitterY : this.bossLaserY
+        const tags = []
+        const profile = {
+            emitterY,
+            isEcho,
+            baseDamage: this.bossWeaponDamage || this.clickDamage || 1,
+            damageMultiplier: 1 + (this.bossPhaseBuffDamage || 0),
+            damageFlat: 0,
+            hitWindow: (this.bossWeaponHitWindow || 80) + (this.bossPhaseBuffHitWindow || 0),
+            cooldownMultiplier: this.bossPhaseBuffCooldownMultiplier || 1,
+            laneOffsets: null,
+            widthMultiplier: 1,
+            glowMultiplier: 1,
+            primaryColor: null,
+            secondaryColor: null,
+            grazeWindow: 0,
+            tags,
+            canQueueEcho: !isEcho
+        }
+
+        if (!isEcho) {
+            upgradeState.shotCounter += 1
+        }
+
+        if (this.hasBossPhaseUpgrade("prismSplitter")) {
+            profile.laneOffsets = this.getBossPrismLaneOffsets(isEcho)
+            profile.hitWindow += this.bossWeaponType === "scatter" ? 10 : 6
+            profile.widthMultiplier *= this.bossWeaponType === "heavy" ? 1.05 : 1.02
+        }
+
+        if (this.hasBossPhaseUpgrade("resonanceFracture") && upgradeState.fractureStacks > 0) {
+            profile.damageMultiplier += upgradeState.fractureStacks * 0.1
+            profile.hitWindow += upgradeState.fractureStacks * 3
+        }
+
+        if (upgradeState.anchorLockTime > 0) {
+            profile.damageMultiplier += 0.18
+            profile.hitWindow += 18
+            profile.primaryColor = "#ff9ef4"
+            profile.secondaryColor = "#ffe3fb"
+            tags.push("LOCK")
+        }
+
+        if (this.hasBossPhaseUpgrade("phaseAnchor") && !isEcho) {
+            profile.grazeWindow = 34
+        }
+
+        if (this.hasBossPhaseUpgrade("surgeFeedback") && upgradeState.surgeReady && !isEcho) {
+            profile.damageMultiplier += 0.55
+            profile.hitWindow += 12
+            profile.cooldownMultiplier *= 0.72
+            profile.widthMultiplier *= 1.16
+            profile.glowMultiplier *= 1.18
+            profile.primaryColor = "#ffd27a"
+            profile.secondaryColor = "#fff3cf"
+            tags.push("SURGE")
+            upgradeState.surgeReady = false
+        }
+
+        if (this.hasBossPhaseUpgrade("burstCapacitor") && !isEcho && upgradeState.shotCounter % 4 === 0) {
+            profile.damageMultiplier += 0.7
+            profile.hitWindow += 16
+            profile.widthMultiplier *= 1.2
+            profile.glowMultiplier *= 1.22
+            profile.primaryColor = "#ff9b55"
+            profile.secondaryColor = "#ffe1bd"
+            tags.push("BURST")
+        }
+
+        if (this.hasBossPhaseUpgrade("counterphaseGuard") && upgradeState.counterphaseReady && !isEcho) {
+            profile.damageMultiplier += 0.45
+            profile.hitWindow += 22
+            profile.widthMultiplier *= 1.16
+            profile.glowMultiplier *= 1.18
+            profile.primaryColor = "#ff79ac"
+            profile.secondaryColor = "#ffd7ea"
+            tags.push("COUNTER")
+            upgradeState.counterphaseReady = false
+        }
+
+        if (isEcho) {
+            profile.damageMultiplier *= this.getBossEchoDamageMultiplier()
+            profile.hitWindow += 8
+            profile.widthMultiplier *= 0.92
+            profile.glowMultiplier *= 0.96
+            profile.primaryColor = profile.primaryColor || "#9fdfff"
+            profile.secondaryColor = profile.secondaryColor || "#effcff"
+            tags.push("ECHO")
+        }
+
+        return profile
+
+    }
+
+    applyBossShotHitEffects(profile, damage) {
+
+        const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
+        const bossX = this.canvas.width / 2
+        const bossY = this.canvas.height / 2
+
+        if (this.hasBossPhaseUpgrade("echoLattice") && profile.canQueueEcho) {
+            upgradeState.pendingEchoShots.push({
+                timer: 0.13,
+                emitterY: profile.emitterY
+            })
+        }
+
+        if (this.hasBossPhaseUpgrade("resonanceFracture")) {
+            upgradeState.fractureStacks = Math.min(4, upgradeState.fractureStacks + 1)
+            upgradeState.fractureTimer = 2.4
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    bossX + ((Math.random() - 0.5) * 36),
+                    bossY - 26 + ((Math.random() - 0.5) * 12),
+                    "FRACTURE " + upgradeState.fractureStacks,
+                    "#ffd4f5"
+                )
+            )
+        }
+
+        if (this.hasBossPhaseUpgrade("surgeFeedback") && !profile.isEcho) {
+            upgradeState.surgeCharge += 1
+            if (upgradeState.surgeCharge >= 3) {
+                upgradeState.surgeCharge = 0
+                upgradeState.surgeReady = true
+
+                this.floatingTexts.push(
+                    new FloatingText(
+                        bossX,
+                        bossY - 42,
+                        "SURGE ARMED",
+                        "#ffe085"
+                    )
+                )
+            }
+        }
+
+        if (profile.tags.length > 0) {
+            this.floatingTexts.push(
+                new FloatingText(
+                    bossX + ((Math.random() - 0.5) * 28),
+                    bossY - 46 + ((Math.random() - 0.5) * 10),
+                    profile.tags.join(" "),
+                    profile.primaryColor || "#d9e7ff"
+                )
+            )
+        }
+
+        if (this.bossHealth <= 0) {
+            this.winBossFight()
+        }
+
+    }
+
+    resolveBossShot(profile) {
 
         const bossX = this.canvas.width / 2
         const bossY = this.canvas.height / 2
-        const hitWindow = (this.bossWeaponHitWindow || 80) + this.bossPhaseBuffHitWindow
-        const hit = Math.abs(this.bossLaserY - bossY) <= hitWindow
+        const laneOffsets = Array.isArray(profile.laneOffsets) && profile.laneOffsets.length > 0
+            ? profile.laneOffsets
+            : [0]
+        let bestDistance = Infinity
+        let hit = false
+
+        for (const laneOffset of laneOffsets) {
+            const laneDistance = Math.abs((profile.emitterY + laneOffset) - bossY)
+            if (laneDistance < bestDistance) {
+                bestDistance = laneDistance
+            }
+            if (laneDistance <= profile.hitWindow) {
+                hit = true
+            }
+        }
 
         if (hit) {
-            const baseDamage = this.bossWeaponDamage || this.clickDamage
-            const damage = Math.max(1, Math.round(baseDamage * (1 + this.bossPhaseBuffDamage)))
+            const damage = Math.max(
+                1,
+                Math.round((profile.baseDamage * profile.damageMultiplier) + profile.damageFlat)
+            )
             this.bossHealth = Math.max(0, this.bossHealth - damage)
             this.recordDamageDealt(damage)
 
@@ -4182,23 +4571,123 @@ export class Game {
                     bossX + ((Math.random() - 0.5) * 40),
                     bossY + ((Math.random() - 0.5) * 30),
                     "-" + damage,
-                    "#ff8c8c"
+                    profile.primaryColor || "#ff8c8c"
+                )
+            )
+
+            this.applyBossShotHitEffects(profile, damage)
+            return true
+        }
+
+        if (profile.grazeWindow > 0 && bestDistance <= (profile.hitWindow + profile.grazeWindow)) {
+            const grazeDamage = Math.max(
+                1,
+                Math.round((profile.baseDamage * 0.3) + Math.max(0, profile.damageFlat * 0.5))
+            )
+
+            this.bossHealth = Math.max(0, this.bossHealth - grazeDamage)
+            this.recordDamageDealt(grazeDamage)
+            this.bossPhaseUpgradeState.anchorLockTime = 1.35
+
+            this.floatingTexts.push(
+                new FloatingText(
+                    bossX + ((Math.random() - 0.5) * 36),
+                    bossY - 8 + ((Math.random() - 0.5) * 18),
+                    "GRAZE",
+                    "#ffc1ff"
+                )
+            )
+            this.floatingTexts.push(
+                new FloatingText(
+                    bossX + ((Math.random() - 0.5) * 36),
+                    bossY + 22 + ((Math.random() - 0.5) * 18),
+                    "-" + grazeDamage,
+                    "#ffb2ff"
                 )
             )
 
             if (this.bossHealth <= 0) {
                 this.winBossFight()
             }
-        } else {
-            this.floatingTexts.push(
-                new FloatingText(
-                    this.canvas.width - 160 + ((Math.random() - 0.5) * 20),
-                    this.bossLaserY + ((Math.random() - 0.5) * 16),
-                    "MISS",
-                    "#b8c7ff"
-                )
-            )
+            return true
         }
+
+        if (this.hasBossPhaseUpgrade("resonanceFracture") && !profile.isEcho) {
+            this.bossPhaseUpgradeState.fractureStacks = Math.max(0, this.bossPhaseUpgradeState.fractureStacks - 1)
+            if (this.bossPhaseUpgradeState.fractureStacks <= 0) {
+                this.bossPhaseUpgradeState.fractureTimer = 0
+            }
+        }
+
+        this.floatingTexts.push(
+            new FloatingText(
+                this.canvas.width - 160 + ((Math.random() - 0.5) * 20),
+                profile.emitterY + ((Math.random() - 0.5) * 16),
+                "MISS",
+                "#b8c7ff"
+            )
+        )
+
+        return false
+
+    }
+
+    firePendingBossEchoShots() {
+
+        const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
+        if (!Array.isArray(upgradeState.pendingEchoShots) || upgradeState.pendingEchoShots.length === 0) {
+            return
+        }
+
+        for (let i = upgradeState.pendingEchoShots.length - 1; i >= 0; i--) {
+            const echoShot = upgradeState.pendingEchoShots[i]
+            if (echoShot.timer > 0) continue
+
+            const profile = this.createBossShotProfile({
+                emitterY: echoShot.emitterY,
+                isEcho: true
+            })
+            this.queueBossBeamFlash({
+                y: profile.emitterY,
+                laneOffsets: profile.laneOffsets,
+                widthMultiplier: profile.widthMultiplier,
+                glowMultiplier: profile.glowMultiplier,
+                primaryColor: profile.primaryColor,
+                secondaryColor: profile.secondaryColor,
+                duration: 0.07
+            })
+            this.resolveBossShot(profile)
+            upgradeState.pendingEchoShots.splice(i, 1)
+        }
+
+    }
+
+    tryFireBossWeapon() {
+
+        if (!this.bossFightActive) return false
+        if (this.transportAnimating) return false
+        if (this.bossPhaseChoiceActive) return false
+        if (this.bossLaserCooldownTimer > 0) return false
+
+        const profile = this.createBossShotProfile({ emitterY: this.bossLaserY, isEcho: false })
+        const effectiveCooldown = Math.max(
+            0.04,
+            (this.bossWeaponCooldownBase || this.bossLaserCooldown || 0.18) * profile.cooldownMultiplier
+        )
+
+        this.bossLaserCooldown = effectiveCooldown
+        this.bossLaserCooldownTimer = effectiveCooldown
+        this.bossShotFlashTime = 0.08
+        this.queueBossBeamFlash({
+            y: profile.emitterY,
+            laneOffsets: profile.laneOffsets,
+            widthMultiplier: profile.widthMultiplier,
+            glowMultiplier: profile.glowMultiplier,
+            primaryColor: profile.primaryColor,
+            secondaryColor: profile.secondaryColor
+        })
+
+        this.resolveBossShot(profile)
 
         return true
 
@@ -4314,6 +4803,9 @@ export class Game {
             timeScale = 0.65
         }
         const scaledDelta = delta * timeScale
+        if (this.worldSystem && typeof this.worldSystem.update === "function") {
+            this.worldSystem.update(scaledDelta)
+        }
         this.updateGravityWells(scaledDelta)
 
         this.gridOffset += delta * 10
@@ -4682,6 +5174,32 @@ export class Game {
         ctx.fill()
         ctx.restore()
 
+        const upgradeState = this.bossPhaseUpgradeState || this.createBossPhaseUpgradeState()
+        if (upgradeState.fractureStacks > 0 || upgradeState.anchorLockTime > 0) {
+            ctx.save()
+
+            if (upgradeState.fractureStacks > 0) {
+                ctx.globalAlpha = 0.18 + (upgradeState.fractureStacks * 0.06)
+                ctx.strokeStyle = "#ffd1ef"
+                ctx.lineWidth = 2 + (upgradeState.fractureStacks * 0.35)
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, shellRadius + 12 + (upgradeState.fractureStacks * 3), 0, Math.PI * 2)
+                ctx.stroke()
+            }
+
+            if (upgradeState.anchorLockTime > 0) {
+                const lockPulse = 0.45 + Math.sin(phaseTime * 12) * 0.2
+                ctx.globalAlpha = 0.22 + lockPulse
+                ctx.strokeStyle = "#ff9ef4"
+                ctx.lineWidth = 2.2
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, shellRadius + 24, 0, Math.PI * 2)
+                ctx.stroke()
+            }
+
+            ctx.restore()
+        }
+
         if (this.bossHazardLanes.length > 0) {
             ctx.save()
             const laneX = 24
@@ -4759,17 +5277,24 @@ export class Game {
             ctx.restore()
         }
 
-        if (this.bossShotFlashTime > 0) {
-            const flashRatio = this.bossShotFlashTime / 0.08
+        for (const beamFlash of this.bossBeamFlashEvents) {
+            const flashRatio = beamFlash.maxLife > 0 ? beamFlash.life / beamFlash.maxLife : 0
             const beamStartX = emitterX + 24
             const beamEndX = this.canvas.width - 80
             this.drawBossFightBeam(
                 ctx,
                 emitterX,
-                emitterY,
+                beamFlash.y,
                 beamStartX,
                 beamEndX,
-                flashRatio
+                flashRatio,
+                {
+                    laneOffsets: beamFlash.laneOffsets,
+                    widthMultiplier: beamFlash.widthMultiplier,
+                    glowMultiplier: beamFlash.glowMultiplier,
+                    primaryColor: beamFlash.primaryColor,
+                    secondaryColor: beamFlash.secondaryColor
+                }
             )
         }
 
@@ -4875,6 +5400,23 @@ export class Game {
             centerX,
             barY + barHeight + 134
         )
+        ctx.font = "13px Arial"
+        ctx.fillStyle = "rgba(232,239,255,0.82)"
+        ctx.fillText(
+            "Signal: " + this.getBossPhaseSignalStatus(),
+            centerX,
+            barY + barHeight + 154
+        )
+
+        const activeMutationTitles = this.getActiveBossPhaseUpgradeTitles()
+        if (activeMutationTitles.length > 0) {
+            ctx.fillStyle = "rgba(255,224,187,0.9)"
+            ctx.fillText(
+                "Mutations: " + activeMutationTitles.join(", "),
+                centerX,
+                barY + barHeight + 172
+            )
+        }
 
         ctx.font = "14px Arial"
         ctx.fillStyle = "rgba(230,240,255,0.85)"
@@ -4911,12 +5453,12 @@ export class Game {
             ctx.font = "bold 24px Arial"
             ctx.textAlign = "center"
             ctx.textBaseline = "middle"
-            ctx.fillText("PHASE " + this.bossPhase + " UPGRADE", centerX, panelY + 48)
+            ctx.fillText("PHASE " + this.bossPhase + " SIGNAL MUTATION", centerX, panelY + 48)
 
             ctx.fillStyle = "rgba(216,228,255,0.9)"
             ctx.font = "14px Arial"
             ctx.fillText(
-                "Choose one enhancement before the fight continues",
+                "Choose one temporary waveform rewrite before the fight continues",
                 centerX,
                 panelY + 76
             )
@@ -4938,7 +5480,7 @@ export class Game {
                         unlocked: true,
                         hovered,
                         flashIntensity: 0,
-                        iconId: "strength",
+                        iconId: card.choice.iconId || "strength",
                         stackSubtitle: true
                     }
                 )
@@ -5840,6 +6382,10 @@ export class Game {
             ctx.globalAlpha = 1
         }
 
+        if (this.worldSystem && typeof this.worldSystem.drawFieldEffects === "function") {
+            this.worldSystem.drawFieldEffects(ctx)
+        }
+
         const gridColor = this.getCurrentWorldConfig().gridColor
         ctx.strokeStyle = gridColor
 
@@ -6131,8 +6677,13 @@ export class Game {
             this.worldSectionY = y
             const worldNameY = contentY + 16
             const worldSubtitleY = contentY + 34
-            const transportY = contentY + 54
-            const statusY = contentY + 76
+            const worldIntelEntries = this.worldSystem
+                ? this.worldSystem.getWorldIntelLines()
+                : []
+            const worldIntelLineHeight = 16
+            const worldIntelStartY = contentY + 52
+            const transportY = worldIntelStartY + (worldIntelEntries.length * worldIntelLineHeight) + 8
+            const statusY = transportY + 22
             const showGatePurchaseButton = this.transportReady && !this.worldGatePurchased && !this.transportAnimating
             const showBossPrep = this.transportReady && this.worldGatePurchased && !this.transportAnimating && !this.bossFightActive
             const showModifierInsight = this.hasProgressNode("modifierInsight")
@@ -6213,6 +6764,17 @@ export class Game {
                     worldSubtitleY,
                     contentWidth
                 )
+                this.ctx.font = "13px Arial"
+                for (let i = 0; i < worldIntelEntries.length; i++) {
+                    const entry = worldIntelEntries[i]
+                    this.ctx.fillText(
+                        entry.label + ": " + entry.text,
+                        contentX,
+                        worldIntelStartY + (i * worldIntelLineHeight),
+                        contentWidth
+                    )
+                }
+
                 this.ctx.font = "15px Arial"
                 this.ctx.fillText(
                     "Transport Charge: " + transportChargeDisplay + " / " + this.transportChargeRequired,

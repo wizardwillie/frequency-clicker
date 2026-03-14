@@ -299,9 +299,21 @@ export class CollisionSystem {
             }
         }
 
+        let resolvedDamage = numericDamage
+        if (this.game.worldSystem && typeof this.game.worldSystem.modifyIncomingDamage === "function") {
+            const worldDamageResult = this.game.worldSystem.modifyIncomingDamage(target, resolvedDamage, sourceLaser)
+            if (Number.isFinite(worldDamageResult?.damage)) {
+                resolvedDamage = worldDamageResult.damage
+            }
+        }
+
+        if (resolvedDamage <= 0) {
+            return { target, dealt: 0, destroyed: false, shieldBroken: false }
+        }
+
         target.hitFlashTime = target.hitFlashDuration
         const previousHealth = target.health
-        target.health -= numericDamage
+        target.health -= resolvedDamage
         const dealt = Math.max(0, previousHealth - Math.max(0, target.health))
 
         if (dealt > 0 && options.recordDamage !== false) {

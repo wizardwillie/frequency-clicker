@@ -31,17 +31,20 @@ Frequency Laser Clicker uses a modular, file-per-system structure around a singl
 - Compose support modules:
   - `EconomySystem`
   - `OverlayController`
+  - `WorldSystem`
 - Manage laser-type stat containers and active type switching
+- Own boss-fight runtime and temporary boss mutation state
 
 ### Update Cycle
 
 `Game.update(delta)` currently does:
 1. `spawnSystem.update(delta)`
-2. `updateAutoFire()`
-3. Laser updates + inactive laser cull
-4. Target updates
-5. `collisionSystem.check()`
-6. Floating text updates + expiration cull
+2. `worldSystem.update(delta)`
+3. `updateAutoFire()`
+4. Laser updates + inactive laser cull
+5. Target updates
+6. `collisionSystem.check()`
+7. Floating text updates + expiration cull
 
 ### Render Cycle
 
@@ -73,6 +76,18 @@ Responsibilities:
 - Centralizes overlay cursor routing
 - Centralizes overlay draw dispatch
 
+## WorldSystem (`src/worldSystem.js`)
+
+Responsibilities:
+- Resolves authored world behavior from `WORLD_DATA`
+- Provides world-specific spawn lane logic
+- Provides world-specific target weighting
+- Applies world-specific target state at spawn time
+- Updates persistent world field behavior on targets
+- Modifies incoming damage for world mechanics such as cryo shells and void resonance
+- Draws low-alpha world field effects behind the combat grid
+- Supplies readable world intel lines for the WORLD panel
+
 ## SpawnSystem (`src/spawn.js`)
 
 Responsibilities:
@@ -81,8 +96,9 @@ Responsibilities:
 - Uses interval-based while-loop spawning
 - Enforces `MAX_ACTIVE_TARGETS`
 - Spawns target types by weighted probabilities
+- Applies world-specific weighting and spawn lane hooks through `WorldSystem`
 - Applies value multiplier from target value upgrades
-- Biases Y positions toward center wave band
+- Falls back to center-wave bias when a world does not override spawn lanes
 
 Inputs:
 - `game.targetUpgradeSystem`
@@ -142,6 +158,7 @@ Responsibilities:
 - Tracks type/value/health/radius
 - Tracks hit flash timer for damage feedback
 - Draws type-specific style
+- Draws world-specific shell/resonance/field cues when present
 - Draws health bars for armored/reinforced targets
 
 ## FloatingText (`src/floatingText.js`)
@@ -180,6 +197,9 @@ High-level flow:
 3. `SpawnSystem` creates `Target` instances from constants + target economy multipliers.
 4. `Game` creates `Laser` instances from active laser stats + laser type visuals.
 5. `CollisionSystem` resolves interactions and delegates rewards to `EconomySystem`.
-6. `OverlayController` routes non-gameplay overlay input and draw flow.
-7. Upgrade systems mutate progression values consumed by spawn and firing systems.
-8. `drawPanel()` renders progression UI in a scrollable clipped region.
+6. `WorldSystem` shapes spawn, damage, target behavior, and field rendering for the active world.
+7. `OverlayController` routes non-gameplay overlay input and draw flow.
+8. Upgrade systems mutate progression values consumed by spawn and firing systems.
+9. `drawPanel()` renders progression UI in a scrollable clipped region.
+
+Boss phase mutations are currently implemented in `src/game.js` as temporary boss-runtime state and helper methods. They are intentionally scoped to boss combat and do not persist into run or meta progression.

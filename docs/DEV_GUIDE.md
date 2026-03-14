@@ -16,4 +16,5 @@ For active development rules, use:
 
 - `src/economy.js` owns explicit point reward/spend rules.
 - `src/overlayController.js` owns overlay/menu state and routing.
+- `src/worldSystem.js` owns authored world behavior and world combat hooks.
 - `src/ui.js` remains unused.

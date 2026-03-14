@@ -2,14 +2,14 @@ export const SIMPLE_LASER_COST = 10
 export const AUTO_FIRE_COST = 250
 export const AUTO_FIRE_SPEED_MULTIPLIER = 1.6
 export const BASE_MANUAL_FIRE_COOLDOWN = 0.15
-export const DEV_STARTING_POINTS = 0
+export const DEV_STARTING_POINTS = 1000000
 export const GAME_STATE_TITLE = "title"
 export const GAME_STATE_PLAYING = "playing"
 export const GAME_STATE_BOSS = "boss"
 export const WORLD_START_LEVEL = 1
 export const WORLD_POINT_MULTIPLIER_BASE = 1
 export const WORLD_POINT_MULTIPLIER_GROWTH = 1.5
-export const WORLD_GATE_BASE_COST = 10000
+export const WORLD_GATE_BASE_COST = 10
 export const WORLD_GATE_COST_GROWTH = 2.25
 export const BOSS_PREP_SHIELD_COST = 8000
 export const BOSS_PREP_OVERCHARGER_COST = 10000
@@ -23,34 +23,79 @@ export const WORLD_DATA = {
     1: {
         name: "Neon Grid",
         subtitle: "Signal Calibration Zone",
+        behaviorId: "neonGrid",
         gridColor: "#2a5fff",
         particleColor: "#00aaff",
         targets: ["basic", "highValue", "fast", "armored", "reinforced", "shielded"],
-        description: "The baseline simulation where wave control first stabilizes under pressure."
+        description: "The baseline simulation where wave control first stabilizes under pressure.",
+        fieldSummary: "Stable lanes and centered entries keep combat readable.",
+        pressureSummary: "Balanced traffic teaches the core waveform spacing game.",
+        signalHint: "Any beam works here. Learn how frequency and amplitude shape coverage.",
+        targetWeightBoosts: {
+            basic: 1.15,
+            highValue: 1.1,
+            fast: 1.05
+        }
     },
     2: {
         name: "Plasma Storm",
         subtitle: "Unstable Charge Fields",
+        behaviorId: "plasmaStorm",
         gridColor: "#a03bff",
         particleColor: "#ff66ff",
         targets: ["phase", "charger", "reflector", "splitter", "healer", "exploder"],
-        description: "Erratic plasma surges distort trajectories and reward reactive play."
+        description: "Erratic plasma surges distort trajectories and reward reactive play.",
+        fieldSummary: "Storm drift bends targets between lanes and destabilizes spacing.",
+        pressureSummary: "Chargers, splitters, and exploders create volatile traffic bursts.",
+        signalHint: "Wide amplitude and dense passes make unstable trajectories easier to catch.",
+        targetWeightBoosts: {
+            phase: 1.15,
+            charger: 1.35,
+            reflector: 1.15,
+            splitter: 1.4,
+            healer: 0.9,
+            exploder: 1.55,
+            swarm: 1.35
+        }
     },
     3: {
         name: "Cryo Circuit",
         subtitle: "Frozen Signal Lattice",
+        behaviorId: "cryoCircuit",
         gridColor: "#66c7ff",
         particleColor: "#9ee6ff",
         targets: ["crystal", "shielded", "armored", "elite", "healer"],
-        description: "Frozen conduits harden enemy shells, forcing sustained precision fire."
+        description: "Frozen conduits harden enemy shells, forcing sustained precision fire.",
+        fieldSummary: "Frozen lattice lanes hold targets in deliberate defensive rows.",
+        pressureSummary: "Cryo shells blunt weak hits and reward sustained armor breaking.",
+        signalHint: "Strength and heavy beams crack fortified targets faster than wide spam.",
+        targetWeightBoosts: {
+            crystal: 1.65,
+            shielded: 1.35,
+            armored: 1.3,
+            elite: 1.2,
+            healer: 0.92
+        }
     },
     4: {
         name: "Void Pulse",
         subtitle: "Dimensional Frequency Collapse",
+        behaviorId: "voidPulse",
         gridColor: "#7b4dff",
         particleColor: "#c38bff",
         targets: ["phantom", "ancient", "elite", "phase", "heavy", "boss"],
-        description: "Collapsed dimensions leak elite signatures and catastrophic pulse events."
+        description: "Collapsed dimensions leak elite signatures and catastrophic pulse events.",
+        fieldSummary: "Void resonance windows distort how elite signatures receive damage.",
+        pressureSummary: "Mirrored lanes and phase threats punish passive beam setups.",
+        signalHint: "High frequency and pulse timing exploit exposed targets more reliably.",
+        targetWeightBoosts: {
+            phantom: 1.35,
+            ancient: 1.15,
+            elite: 1.3,
+            phase: 1.55,
+            heavy: 1.1,
+            boss: 1.05
+        }
     }
 }
 export const WORLD_BOSS_DATA = {
