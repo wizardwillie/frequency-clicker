@@ -113,12 +113,12 @@
 - Spawn pacing remains smooth and capped.
 - Collision behaves correctly for all target types.
 - Laser type switching and upgrade effects remain consistent.
-- `F8` balance overlay updates unlock, gate, prep, boss timing, and boss shot-accuracy telemetry correctly.
+- `Shift + B` balance overlay updates unlock, gate, prep, boss timing, and boss shot-accuracy telemetry correctly.
 - Recent run summaries are appended to `localStorage["frequencyLaserClickerRunSummaries"]` on world advance and menu exit.
 
 ## Guided Balance Playtests
 
-- Use `F8` during fresh-save runs to monitor:
+- Use `Shift + B` during fresh-save runs to monitor:
   - unlock timings
   - gate-loop timings
   - prep spend

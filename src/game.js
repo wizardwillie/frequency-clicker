@@ -462,7 +462,8 @@ export class Game {
             this.handleWheel(event)
         }, { passive: false })
         window.addEventListener("keydown", (event) => {
-            if (event.key === "F8") {
+            const normalizedKey = typeof event.key === "string" ? event.key.toLowerCase() : ""
+            if (event.shiftKey && normalizedKey === "b") {
                 this.showBalanceOverlay = !this.showBalanceOverlay
                 return
             }

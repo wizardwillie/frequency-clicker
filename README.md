@@ -46,7 +46,7 @@ Open `index.html` directly in a modern browser.
 
 ## Developer Telemetry
 
-- Press `F8` to toggle the balance overlay during title, gameplay, or boss states.
+- Press `Shift + B` to toggle the balance overlay during title, gameplay, or boss states.
 - Recent per-run summaries are stored in browser local storage under `frequencyLaserClickerRunSummaries`.
 
 ## Gameplay Systems

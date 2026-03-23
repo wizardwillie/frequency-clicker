@@ -41,7 +41,7 @@ Upgrade growth:
 
 - Costs generally scale with `floor(baseCost * growth^level)`.
 - Spawn and reward outputs are further modified by target economy upgrades.
-- The `F8` balance overlay now groups run, weapon-flow, gate-loop, boss, meta, and recent-run metrics.
+- The `Shift + B` balance overlay now groups run, weapon-flow, gate-loop, boss, meta, and recent-run metrics.
 - Recent playtest summaries are stored in `localStorage["frequencyLaserClickerRunSummaries"]`.
 - Run summaries now include weapon usage, boss shot accuracy by weapon type, and boss fail reasons such as `timeout`, `projectile`, or `hazard`.
 - Keep this file synced when constants change.
